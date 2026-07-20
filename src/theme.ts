@@ -9,7 +9,7 @@ export const colors = {
   border: '#32373F',
   text: '#F2F3F5',
   textSecondary: '#9BA3AE',
-  textTertiary: '#6B7380',
+  textTertiary: '#8A93A0',
   accent: '#F5A623',
   accentPressed: '#D98F14',
   onAccent: '#1A1300',
@@ -43,6 +43,13 @@ export const type = {
     letterSpacing: 0.8,
   },
   mono: { fontVariant: ['tabular-nums' as const] },
+  caption: { fontSize: 12, color: colors.textSecondary },
+  statValue: {
+    fontSize: 22,
+    fontWeight: '700' as const,
+    color: colors.text,
+    fontVariant: ['tabular-nums' as const],
+  },
 } as const;
 
 export const radii = {

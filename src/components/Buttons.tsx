@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
 import { colors, radii, spacing, touchTarget } from '@/theme';
 
 type ButtonProps = {
@@ -8,14 +7,18 @@ type ButtonProps = {
   onPress: () => void;
   variant?: 'primary' | 'secondary' | 'danger';
   disabled?: boolean;
+  loading?: boolean;
   style?: ViewStyle;
 };
 
-export function Button({ label, onPress, variant = 'primary', disabled, style }: ButtonProps) {
+export function Button({ label, onPress, variant = 'primary', disabled, loading, style }: ButtonProps) {
+  const inert = disabled || loading;
   return (
     <Pressable
       onPress={onPress}
-      disabled={disabled}
+      disabled={inert}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: !!inert, busy: !!loading }}
       style={({ pressed }) => [
         styles.btn,
         variant === 'primary' && { backgroundColor: pressed ? colors.accentPressed : colors.accent },
@@ -29,14 +32,18 @@ export function Button({ label, onPress, variant = 'primary', disabled, style }:
         style,
       ]}
     >
-      <Text
-        style={[
-          styles.btnLabel,
-          { color: variant === 'primary' ? colors.onAccent : colors.text },
-        ]}
-      >
-        {label}
-      </Text>
+      {loading ? (
+        <ActivityIndicator color={variant === 'primary' ? colors.onAccent : colors.text} />
+      ) : (
+        <Text
+          style={[
+            styles.btnLabel,
+            { color: variant === 'primary' ? colors.onAccent : colors.text },
+          ]}
+        >
+          {label}
+        </Text>
+      )}
     </Pressable>
   );
 }
@@ -44,16 +51,19 @@ export function Button({ label, onPress, variant = 'primary', disabled, style }:
 type FabProps = {
   onPress: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
+  accessibilityLabel?: string;
 };
 
-export function Fab({ onPress, icon = 'add' }: FabProps) {
-  const insets = useSafeAreaInsets();
+export function Fab({ onPress, icon = 'add', accessibilityLabel = 'Add' }: FabProps) {
+  // FABs render inside tab scenes, which already sit above the tab bar —
+  // adding insets.bottom here would double-count the safe area.
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
       style={({ pressed }) => [
         styles.fab,
-        { bottom: insets.bottom + spacing.lg },
         { backgroundColor: pressed ? colors.accentPressed : colors.accent },
       ]}
     >
@@ -75,6 +85,7 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: spacing.xl,
+    bottom: spacing.lg,
     width: 60,
     height: 60,
     borderRadius: 30,
