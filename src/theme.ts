@@ -2,6 +2,8 @@
 // Amber accent (reticle-illumination orange) reserved for primary actions and
 // confirmed DOPE; everything else stays neutral so data reads first.
 
+import type { TextStyle } from 'react-native';
+
 export const colors = {
   bg: '#121417',
   surface: '#1C1F24',
@@ -16,6 +18,8 @@ export const colors = {
   confirmed: '#F5A623',
   predicted: '#8A93A0',
   danger: '#E5544B',
+  dangerFill: '#B3382F',
+  onDanger: '#FFFFFF',
   success: '#4CAF7D',
   fieldBg: '#000000',
   fieldText: '#FFB300',
@@ -29,6 +33,10 @@ export const spacing = {
   xl: 24,
   xxl: 32,
 } as const;
+
+// Typed as a mutable FontVariant[] so tokens carrying it stay assignable to
+// RN's TextStyle when spread (an `as const` tuple would be readonly).
+const tabularNums: NonNullable<TextStyle['fontVariant']> = ['tabular-nums'];
 
 export const type = {
   title: { fontSize: 28, fontWeight: '700' as const, color: colors.text },

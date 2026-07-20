@@ -25,7 +25,7 @@ export type ChargePoint = {
 };
 
 export type FlatSpot = {
-  /** Indexes into the input array covered by this flat spot (>= 2 points). */
+  /** Indexes into the input array covered by this flat spot (>= 3 points). */
   startIndex: number;
   endIndex: number;
   /** Velocity spread across the flat spot, fps. */
@@ -61,7 +61,7 @@ export function findFlatSpots(points: ChargePoint[], threshold = 0.4): FlatSpot[
       const endDelta = flat ? i : i - 1;
       const startIndex = runStart!;
       const endIndex = endDelta + 1;
-      if (endIndex - startIndex >= 1) {
+      if (endIndex - startIndex >= 2) {
         const window = sorted.slice(startIndex, endIndex + 1);
         const velocities = window.map((p) => p.avgFps);
         spots.push({

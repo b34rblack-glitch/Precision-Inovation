@@ -138,6 +138,9 @@ export function solveZeroAngle(input: {
   zeroDistanceM: number;
   env: Env;
 }): number {
+  // A non-positive zero distance has no meaningful launch angle; short-circuit
+  // to avoid atan2(x, 0) divergence in the Newton step below.
+  if (input.zeroDistanceM <= 0) return 0;
   let angle = 0.001; // ~1 mil initial guess
   for (let i = 0; i < 5; i++) {
     const [sample] = integrate(angle, input.mvMps, input.startYM, input.env, [input.zeroDistanceM]);

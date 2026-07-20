@@ -73,6 +73,23 @@ describe('flat spot detection (Satterlee)', () => {
     expect(main.spreadFps).toBeLessThanOrEqual(8);
   });
 
+  it('ignores a single low-delta step on an otherwise linear ladder', () => {
+    // Rising ~20 fps/step with one lone small step (index 3→4). A single flat
+    // delta (2 charge points) is below the >= 2-consecutive-delta window, so it
+    // must not be reported as a flat spot.
+    const points = [
+      { chargeGr: 40.0, avgFps: 2600 },
+      { chargeGr: 40.3, avgFps: 2620 },
+      { chargeGr: 40.6, avgFps: 2640 },
+      { chargeGr: 40.9, avgFps: 2660 },
+      { chargeGr: 41.2, avgFps: 2662 },
+      { chargeGr: 41.5, avgFps: 2682 },
+      { chargeGr: 41.8, avgFps: 2702 },
+      { chargeGr: 42.1, avgFps: 2722 },
+    ];
+    expect(findFlatSpots(points)).toEqual([]);
+  });
+
   it('returns nothing for a perfectly linear ladder', () => {
     const points = Array.from({ length: 8 }, (_, i) => ({
       chargeGr: 40 + i * 0.3,

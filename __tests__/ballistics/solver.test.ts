@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ICAO_SEA_LEVEL } from '@/lib/ballistics/atmosphere';
-import { solveTrajectory } from '@/lib/ballistics/solver';
+import { solveTrajectory, solveZeroAngle } from '@/lib/ballistics/solver';
 import { BallisticInput } from '@/lib/ballistics/types';
 import { milToMoa } from '@/lib/units';
 
@@ -86,6 +86,28 @@ describe('solver: physics invariants', () => {
     // extrapolate: energy at 1-2 yd is within a few ft·lb of muzzle
     expect(points[0]!.energyFtLb!).toBeGreaterThan(2560);
     expect(points[0]!.energyFtLb!).toBeLessThan(2630);
+  });
+
+  it('zero distance of 0 does not throw or yield NaN', () => {
+    const env = {
+      densityKgM3: 1.225,
+      speedOfSoundMps: 340.29,
+      bcKgM2: 0.243 * 703.06958,
+      bcModel: 'G7' as const,
+      windMps: 0,
+    };
+    // The guarded solver returns a flat (zero) launch angle rather than
+    // diverging through atan2(x, 0).
+    expect(solveZeroAngle({ mvMps: 792, startYM: -0.0381, zeroDistanceM: 0, env })).toBe(0);
+
+    // And the full trajectory stays finite end to end.
+    const points = solveTrajectory({ ...base308, zeroDistanceYd: 0 });
+    expect(points.length).toBeGreaterThan(0);
+    for (const p of points) {
+      expect(Number.isFinite(p.dropIn)).toBe(true);
+      expect(Number.isFinite(p.dropMil)).toBe(true);
+      expect(Number.isFinite(p.velocityFps)).toBe(true);
+    }
   });
 
   it('denser (colder) air produces more drop', () => {

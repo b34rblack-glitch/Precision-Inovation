@@ -12,9 +12,9 @@ export default function TabsLayout() {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
-          height: 56 + insets.bottom,
+          height: 64 + insets.bottom,
           paddingBottom: Math.max(insets.bottom, 6),
-          paddingTop: 6,
+          paddingTop: 8,
         },
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textSecondary,

@@ -111,6 +111,27 @@ export async function archiveWorkup(id: string): Promise<void> {
 }
 
 /**
+ * Measured muzzle velocity (avg fps) for a workup's charge weight, taken from
+ * the chronograph string attached to that charge's step. Returns null when the
+ * charge has no step or no string with a recorded average.
+ */
+export async function measuredMvForCharge(
+  workupId: string,
+  chargeGr: number,
+): Promise<number | null> {
+  const [step] = await db
+    .select()
+    .from(workupSteps)
+    .where(and(eq(workupSteps.workupId, workupId), eq(workupSteps.chargeGr, chargeGr)));
+  if (!step) return null;
+  const [string] = await db
+    .select()
+    .from(shotStrings)
+    .where(eq(shotStrings.workupStepId, step.id));
+  return string?.avgFps ?? null;
+}
+
+/**
  * Promote a winning charge weight to a new load version (the workup's result).
  * Copies the workup's base version components with the chosen charge.
  */
@@ -133,6 +154,11 @@ export async function promoteChargeToVersion(workupId: string, chargeGr: number)
     .limit(1);
   const nextNumber = (latest[0]?.versionNumber ?? 0) + 1;
 
+  // Carry the winning charge's measured muzzle velocity onto the new version so
+  // the load card's 'load' MV source works immediately after promotion. Look up
+  // the workup step for the promoted charge, then its chronograph string.
+  const measuredMv = await measuredMvForCharge(workupId, chargeGr);
+
   const versionId = newId();
   await db.insert(loadVersions).values({
     id: versionId,
@@ -152,7 +178,7 @@ export async function promoteChargeToVersion(workupId: string, chargeGr: number)
     cbtoIn: base?.cbtoIn ?? null,
     coalIn: base?.coalIn ?? null,
     crimp: base?.crimp ?? null,
-    muzzleVelocityFps: null,
+    muzzleVelocityFps: measuredMv,
     notes: `Promoted from workup (${workup.type}) at ${chargeGr}gr`,
     createdAt: t,
     updatedAt: t,
