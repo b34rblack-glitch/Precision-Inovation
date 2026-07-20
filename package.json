@@ -1,0 +1,48 @@
+{
+  "name": "precision-innovation",
+  "version": "0.1.0",
+  "main": "expo-router/entry",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
+    "drizzle-orm": "^0.45.2",
+    "expo": "~57.0.7",
+    "expo-constants": "~57.0.6",
+    "expo-crypto": "~57.0.1",
+    "expo-file-system": "~57.0.1",
+    "expo-image-picker": "~57.0.5",
+    "expo-keep-awake": "~57.0.1",
+    "expo-linking": "~57.0.3",
+    "expo-print": "~57.0.1",
+    "expo-router": "~57.0.7",
+    "expo-sharing": "~57.0.6",
+    "expo-sqlite": "~57.0.1",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-hook-form": "^7.82.0",
+    "react-native": "0.86.0",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "4.25.2",
+    "react-native-svg": "15.15.4",
+    "zod": "^4.4.3",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "babel-plugin-inline-import": "^3.0.0",
+    "babel-preset-expo": "^57.0.3",
+    "drizzle-kit": "^0.31.10",
+    "js-ballistics": "^2.0.0",
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.10"
+  },
+  "private": true
+}
