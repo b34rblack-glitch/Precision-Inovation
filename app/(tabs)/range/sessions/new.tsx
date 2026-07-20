@@ -1,29 +1,28 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Buttons';
+import { Chip } from '@/components/Chip';
 import { CollapsibleSection, Field, Half, NumericField, Row } from '@/components/Form';
 import { Screen } from '@/components/Screen';
 import { activeLoadsQuery } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { createSession } from '@/db/repositories/sessions';
+import { parseDecimal } from '@/lib/parse';
 import { useLastUsed } from '@/stores/lastUsedStore';
-import { colors, radii, spacing, touchTarget, type } from '@/theme';
-
-const num = (s: string): number | null => {
-  const v = parseFloat(s);
-  return Number.isFinite(v) ? v : null;
-};
+import { spacing, type } from '@/theme';
 
 export default function NewSessionScreen() {
   const router = useRouter();
+  // Deep-link entry (load detail / workup promotion) overrides last-used.
+  const params = useLocalSearchParams<{ rifleId?: string; loadId?: string }>();
   const lastUsed = useLastUsed();
-  const { data: rifles } = useLiveQuery(activeRiflesQuery());
-  const { data: loads } = useLiveQuery(activeLoadsQuery());
+  const { data: rifles, updatedAt: riflesLoadedAt } = useLiveQuery(activeRiflesQuery());
+  const { data: loads, updatedAt: loadsLoadedAt } = useLiveQuery(activeLoadsQuery());
 
-  const [rifleId, setRifleId] = useState<string | null>(lastUsed.rifleId);
-  const [loadId, setLoadId] = useState<string | null>(lastUsed.loadId);
+  const [rifleId, setRifleId] = useState<string | null>(params.rifleId ?? lastUsed.rifleId);
+  const [loadId, setLoadId] = useState<string | null>(params.loadId ?? lastUsed.loadId);
   const [location, setLocation] = useState(lastUsed.location ?? '');
   const [tempF, setTempF] = useState('');
   const [pressureInHg, setPressureInHg] = useState('');
@@ -31,74 +30,96 @@ export default function NewSessionScreen() {
   const [humidityPct, setHumidityPct] = useState('');
   const [windSpeedMph, setWindSpeedMph] = useState('');
   const [notes, setNotes] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const rifleLoads = useMemo(
     () => loads.filter((l) => l.rifleId === rifleId || l.rifleId === null),
     [loads, rifleId],
   );
 
-  const start = async () => {
-    if (!rifleId) {
-      Alert.alert('Pick a rifle', 'A session needs a rifle. The load is optional but recommended.');
-      return;
+  // Drop stale selections (archived rifle/load remembered from a previous
+  // session) once the live queries have actually run.
+  useEffect(() => {
+    if (riflesLoadedAt && rifleId && !rifles.some((r) => r.id === rifleId)) {
+      setRifleId(null);
     }
-    const load = loads.find((l) => l.id === loadId);
-    const session = await createSession({
-      rifleId,
-      loadVersionId: load?.currentVersionId ?? null,
-      date: new Date(),
-      location: location.trim() || null,
-      tempF: num(tempF),
-      pressureInHg: num(pressureInHg),
-      altitudeFt: num(altitudeFt),
-      humidityPct: num(humidityPct),
-      windSpeedMph: num(windSpeedMph),
-      windDirClock: null,
-      targetPhotoUri: null,
-      notes: notes.trim() || null,
-    });
-    lastUsed.remember({ rifleId, loadId, location: location.trim() || null });
-    router.replace(`/range/sessions/${session.id}`);
+  }, [riflesLoadedAt, rifles, rifleId]);
+  useEffect(() => {
+    if (loadsLoadedAt && loadId && !rifleLoads.some((l) => l.id === loadId)) {
+      setLoadId(null);
+    }
+  }, [loadsLoadedAt, rifleLoads, loadId]);
+
+  const selectRifle = (id: string) => {
+    setRifleId(id);
+    // Keep the load only if it's valid for the newly selected rifle.
+    const nextLoads = loads.filter((l) => l.rifleId === id || l.rifleId === null);
+    if (loadId && !nextLoads.some((l) => l.id === loadId)) setLoadId(null);
+  };
+
+  const start = async () => {
+    if (!rifleId) return;
+    setSubmitting(true);
+    try {
+      // Resolve from the rifle-filtered list so a stale loadId can't attach a
+      // different rifle's load to this session.
+      const load = rifleLoads.find((l) => l.id === loadId);
+      const session = await createSession({
+        rifleId,
+        loadVersionId: load?.currentVersionId ?? null,
+        date: new Date(),
+        location: location.trim() || null,
+        tempF: parseDecimal(tempF),
+        pressureInHg: parseDecimal(pressureInHg),
+        altitudeFt: parseDecimal(altitudeFt),
+        humidityPct: parseDecimal(humidityPct),
+        windSpeedMph: parseDecimal(windSpeedMph),
+        windDirClock: null,
+        targetPhotoUri: null,
+        notes: notes.trim() || null,
+      });
+      lastUsed.remember({ rifleId, loadId: load?.id ?? null, location: location.trim() || null });
+      router.replace(`/range/sessions/${session.id}`);
+    } catch (e) {
+      Alert.alert('Could not start session', e instanceof Error ? e.message : String(e));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <Screen>
+    <Screen underHeader>
       <Text style={[type.label, { marginBottom: spacing.xs }]}>Rifle *</Text>
-      <View style={styles.chipWrap}>
-        {rifles.map((r) => (
-          <Pressable
-            key={r.id}
-            onPress={() => setRifleId(r.id)}
-            style={[styles.chip, rifleId === r.id && styles.chipActive]}
-          >
-            <Text style={[styles.chipLabel, rifleId === r.id && styles.chipLabelActive]}>
-              {r.name}
-            </Text>
-          </Pressable>
-        ))}
-        {rifles.length === 0 ? (
-          <Text style={type.secondary}>No rifles yet — add one in the Rifles tab first.</Text>
-        ) : null}
-      </View>
+      {rifles.length === 0 ? (
+        <>
+          <Text style={[type.secondary, { marginBottom: spacing.md }]}>
+            A session needs a rifle to log DOPE against.
+          </Text>
+          <Button label="Add a Rifle First" onPress={() => router.push('/rifles/new')} />
+        </>
+      ) : (
+        <View style={styles.chipWrap}>
+          {rifles.map((r) => (
+            <Chip
+              key={r.id}
+              label={r.name}
+              selected={rifleId === r.id}
+              onPress={() => selectRifle(r.id)}
+            />
+          ))}
+        </View>
+      )}
 
       <Text style={[type.label, { marginBottom: spacing.xs, marginTop: spacing.md }]}>Load</Text>
       <View style={styles.chipWrap}>
-        <Pressable
-          onPress={() => setLoadId(null)}
-          style={[styles.chip, loadId === null && styles.chipActive]}
-        >
-          <Text style={[styles.chipLabel, loadId === null && styles.chipLabelActive]}>None</Text>
-        </Pressable>
+        <Chip label="None" selected={loadId === null} onPress={() => setLoadId(null)} />
         {rifleLoads.map((l) => (
-          <Pressable
+          <Chip
             key={l.id}
+            label={l.name}
+            selected={loadId === l.id}
             onPress={() => setLoadId(l.id)}
-            style={[styles.chip, loadId === l.id && styles.chipActive]}
-          >
-            <Text style={[styles.chipLabel, loadId === l.id && styles.chipLabelActive]}>
-              {l.name}
-            </Text>
-          </Pressable>
+          />
         ))}
       </View>
 
@@ -109,7 +130,7 @@ export default function NewSessionScreen() {
       <CollapsibleSection title="Conditions">
         <Row>
           <Half>
-            <NumericField label="Temp" value={tempF} onChangeText={setTempF} suffix="°F" />
+            <NumericField label="Temp" value={tempF} onChangeText={setTempF} suffix="°F" signed />
           </Half>
           <Half>
             <NumericField label="Wind" value={windSpeedMph} onChangeText={setWindSpeedMph} suffix="mph" />
@@ -127,23 +148,17 @@ export default function NewSessionScreen() {
         <Field label="Notes" value={notes} onChangeText={setNotes} multiline />
       </CollapsibleSection>
 
-      <Button label="Start Session" onPress={start} style={{ marginTop: spacing.md }} />
+      <Button
+        label="Start Session"
+        onPress={start}
+        disabled={!rifleId}
+        loading={submitting}
+        style={{ marginTop: spacing.md }}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: {
-    minHeight: touchTarget - 8,
-    paddingHorizontal: spacing.lg,
-    justifyContent: 'center',
-    borderRadius: radii.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  chipLabel: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  chipLabelActive: { color: colors.onAccent },
 });

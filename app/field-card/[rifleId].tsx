@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
 import { useRangeCard } from '@/features/rangecard/useRangeCard';
@@ -26,35 +26,59 @@ export default function FieldCardScreen() {
 
   if (!rifle) return <View style={styles.root} />;
 
+  const unitWord = rifle.distanceUnit === 'yd' ? 'yards' : 'meters';
+
   return (
     <View style={[styles.root, { paddingTop: insets.top + 8 }]}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.title}>{rifle.name.toUpperCase()}</Text>
+          <Text style={styles.title} maxFontSizeMultiplier={1.2}>
+            {rifle.name.toUpperCase()}
+          </Text>
           <Text style={styles.subtitle}>
-            {rifle.turretUnit} · W10 = full value 10 mph
+            {rifle.turretUnit} · W10 = full value 10 mph · screen stays awake
           </Text>
         </View>
-        <Pressable onPress={() => router.back()} hitSlop={16} style={styles.closeBtn}>
+        <Pressable
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Close field card"
+          style={styles.closeBtn}
+        >
           <Ionicons name="close" size={30} color={colors.fieldText} />
         </Pressable>
       </View>
 
       {status === 'ready' ? (
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
-          {rows.map((r) => (
-            <View key={r.distanceYd} style={styles.row}>
-              <Text style={styles.dist}>
-                {Math.round(ydToDistance(r.distanceYd, rifle.distanceUnit))}
-              </Text>
-              <Text style={[styles.hold, !r.confirmed && styles.holdPred]}>
-                {formatHold(r.elevation, rifle.turretUnit)}
-                <Text style={styles.marker}>{r.confirmed ? ' ●' : ''}</Text>
-              </Text>
-              <Text style={styles.wind}>{formatHold(r.wind10Mph, rifle.turretUnit)}</Text>
-            </View>
-          ))}
+          {rows.map((r) => {
+            const dist = Math.round(ydToDistance(r.distanceYd, rifle.distanceUnit));
+            return (
+              <View
+                key={r.distanceYd}
+                accessible={true}
+                accessibilityLabel={`${dist} ${unitWord}, hold ${formatHold(r.elevation, rifle.turretUnit)} ${rifle.turretUnit}, ${r.confirmed ? 'confirmed' : 'predicted'}`}
+                style={styles.row}
+              >
+                <Text style={styles.dist} maxFontSizeMultiplier={1.2}>
+                  {dist}
+                </Text>
+                <Text
+                  style={[styles.hold, !r.confirmed && styles.holdPred]}
+                  maxFontSizeMultiplier={1.2}
+                >
+                  {formatHold(r.elevation, rifle.turretUnit)}
+                  <Text style={styles.marker}>{r.confirmed ? ' ●' : ''}</Text>
+                </Text>
+                <Text style={styles.wind} maxFontSizeMultiplier={1.2}>
+                  {formatHold(r.wind10Mph, rifle.turretUnit)}
+                </Text>
+              </View>
+            );
+          })}
         </ScrollView>
+      ) : status === 'loading' ? (
+        <ActivityIndicator color={colors.fieldText} style={{ marginTop: 48 }} />
       ) : (
         <Text style={styles.subtitle}>
           Card unavailable — set up bullet BC and muzzle velocity first.
@@ -69,7 +93,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   title: { color: colors.fieldText, fontSize: 22, fontWeight: '900', letterSpacing: 1 },
   subtitle: { color: '#B38600', fontSize: 13, marginTop: 2 },
-  closeBtn: { padding: 8 },
+  closeBtn: { padding: 9 },
   row: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -78,7 +102,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   dist: {
-    width: 92,
+    minWidth: 92,
+    flexShrink: 0,
     color: colors.fieldText,
     fontSize: 30,
     fontWeight: '800',
@@ -86,6 +111,7 @@ const styles = StyleSheet.create({
   },
   hold: {
     flex: 1,
+    flexShrink: 1,
     color: colors.fieldText,
     fontSize: 44,
     fontWeight: '900',
@@ -95,7 +121,8 @@ const styles = StyleSheet.create({
   holdPred: { color: '#C9A227' },
   marker: { fontSize: 20 },
   wind: {
-    width: 92,
+    minWidth: 92,
+    flexShrink: 0,
     color: '#B38600',
     fontSize: 26,
     fontWeight: '700',
