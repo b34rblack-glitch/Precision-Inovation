@@ -6,15 +6,23 @@ import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { Fab } from '@/components/Buttons';
 import { Screen } from '@/components/Screen';
+import { activeLoadsQuery } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { activeSessionsQuery } from '@/db/repositories/sessions';
 import { colors, spacing, type } from '@/theme';
 
 export default function RangeScreen() {
   const router = useRouter();
-  const { data: sessions } = useLiveQuery(activeSessionsQuery());
+  const { data: sessions, updatedAt: sessionsLoadedAt } = useLiveQuery(activeSessionsQuery());
   const { data: rifles } = useLiveQuery(activeRiflesQuery());
+  const { data: loads } = useLiveQuery(activeLoadsQuery());
   const rifleName = (id: string) => rifles.find((r) => r.id === id)?.name ?? 'Rifle';
+
+  // A range card needs a load assigned to the rifle — rifles without one
+  // would only hit a dead end, so they get no card row.
+  const cardRifles = rifles.filter((rifle) =>
+    loads.some((l) => l.rifleId === rifle.id && l.currentVersionId),
+  );
 
   return (
     <>
@@ -22,15 +30,20 @@ export default function RangeScreen() {
         title="Range"
         fabClearance
         headerRight={
-          <Pressable onPress={() => router.push('/settings')} hitSlop={12}>
+          <Pressable
+            onPress={() => router.push('/settings')}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+          >
             <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
           </Pressable>
         }
       >
-        {rifles.length > 0 ? (
+        {cardRifles.length > 0 ? (
           <>
             <Text style={[type.label, { marginBottom: spacing.sm }]}>Range cards</Text>
-            {rifles.map((rifle) => (
+            {cardRifles.map((rifle) => (
               <Card key={rifle.id} onPress={() => router.push(`/range/cards/${rifle.id}`)}>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <Ionicons
@@ -55,7 +68,7 @@ export default function RangeScreen() {
           </>
         ) : null}
 
-        {sessions.length === 0 ? (
+        {sessionsLoadedAt && sessions.length === 0 ? (
           <EmptyState
             icon="analytics"
             title="No sessions yet"
@@ -77,7 +90,7 @@ export default function RangeScreen() {
           ))
         )}
       </Screen>
-      <Fab onPress={() => router.push('/range/sessions/new')} />
+      <Fab onPress={() => router.push('/range/sessions/new')} accessibilityLabel="New session" />
     </>
   );
 }

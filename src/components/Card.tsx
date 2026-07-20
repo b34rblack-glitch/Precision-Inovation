@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { Pressable, StyleSheet, ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 import { colors, radii, spacing } from '@/theme';
 
 type Props = {
@@ -10,11 +10,12 @@ type Props = {
 
 export function Card({ children, onPress, style }: Props) {
   if (!onPress) {
-    return <Pressable style={[styles.card, style]}>{children}</Pressable>;
+    return <View style={[styles.card, style]}>{children}</View>;
   }
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
       style={({ pressed }) => [styles.card, pressed && styles.pressed, style]}
     >
       {children}

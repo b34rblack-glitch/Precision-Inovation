@@ -1,4 +1,4 @@
-import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 // Canonical storage units across the whole schema: grains, inches, fps, °F,
 // yards, inHg, feet. Conversion to a rifle's display units happens in the UI
@@ -236,7 +236,12 @@ export const rangeCards = sqliteTable(
     ...timestamps,
     ...archivable,
   },
-  (t) => [index('range_cards_rifle_idx').on(t.rifleId)],
+  (t) => [
+    index('range_cards_rifle_idx').on(t.rifleId),
+    // One card per rifle + load version; getOrCreateCard relies on this to
+    // stay race-free (insert .onConflictDoNothing() + re-select).
+    uniqueIndex('range_cards_rifle_load_version_unq').on(t.rifleId, t.loadVersionId),
+  ],
 );
 
 export type Rifle = typeof rifles.$inferSelect;

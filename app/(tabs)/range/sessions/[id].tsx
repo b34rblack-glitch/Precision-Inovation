@@ -1,29 +1,28 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Field, Half, NumericField, Row, Segmented } from '@/components/Form';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
+import { getVersionById } from '@/db/repositories/loads';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
 import {
   addDopeEntry,
   addShotString,
+  archiveSession,
   deleteDopeEntry,
   deleteShotString,
   dopeForSessionQuery,
+  loadVersionLabel,
   sessionByIdQuery,
   stringsForSessionQuery,
 } from '@/db/repositories/sessions';
+import { parseDecimal, parseVelocityList } from '@/lib/parse';
 import { distanceToYd, formatHold, TurretUnit, ydToDistance } from '@/lib/units';
-import { colors, radii, spacing, type } from '@/theme';
-
-const num = (s: string): number | null => {
-  const v = parseFloat(s);
-  return Number.isFinite(v) ? v : null;
-};
+import { colors, spacing, touchTarget, type } from '@/theme';
 
 export default function SessionDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -41,72 +40,133 @@ export default function SessionDetailScreen() {
   // --- DOPE quick entry ---
   const [showDopeForm, setShowDopeForm] = useState(false);
   const [distance, setDistance] = useState('');
+  const [distanceError, setDistanceError] = useState<string | undefined>();
   const [elevation, setElevation] = useState('');
   const [windage, setWindage] = useState('');
   const [groupSize, setGroupSize] = useState('');
   const [confirmed, setConfirmed] = useState<'Confirmed' | 'Provisional'>('Confirmed');
+  const distanceRef = useRef<TextInput>(null);
 
   // --- chrono string entry ---
   const [showChronoForm, setShowChronoForm] = useState(false);
   const [chronoMode, setChronoMode] = useState<'Per-shot' | 'Summary'>('Per-shot');
   const [shotsText, setShotsText] = useState('');
+  const [shotsError, setShotsError] = useState<string | undefined>();
   const [avg, setAvg] = useState('');
   const [sd, setSd] = useState('');
   const [es, setEs] = useState('');
 
-  if (!session) return <Screen>{null}</Screen>;
-
-  const saveDope = async () => {
-    const d = num(distance);
-    if (d == null || d <= 0) {
-      Alert.alert('Distance required', 'Enter the distance you were shooting.');
+  // --- which load this session was shot with ---
+  const [loadLabel, setLoadLabel] = useState<string | null>(null);
+  const [sessionLoadId, setSessionLoadId] = useState<string | null>(null);
+  const loadVersionId = session?.loadVersionId ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    if (!loadVersionId) {
+      setLoadLabel(null);
+      setSessionLoadId(null);
       return;
     }
-    await addDopeEntry({
-      sessionId: session.id,
-      distanceYd: distanceToYd(d, distanceUnit),
-      elevationHold: num(elevation),
-      windageHold: num(windage),
-      holdUnit: turretUnit,
-      groupSizeIn: num(groupSize),
-      poiUpIn: null,
-      poiRightIn: null,
-      confirmed: confirmed === 'Confirmed',
-      notes: null,
+    (async () => {
+      const [label, version] = await Promise.all([
+        loadVersionLabel(loadVersionId),
+        getVersionById(loadVersionId),
+      ]);
+      if (cancelled) return;
+      setLoadLabel(label);
+      setSessionLoadId(version?.loadId ?? null);
+    })().catch(() => {
+      // Non-critical decoration — the session still renders without it.
     });
-    setDistance('');
-    setElevation('');
-    setWindage('');
-    setGroupSize('');
-    setShowDopeForm(false);
+    return () => {
+      cancelled = true;
+    };
+  }, [loadVersionId]);
+
+  if (!session) return <Screen underHeader>{null}</Screen>;
+
+  const saveDope = async () => {
+    const d = parseDecimal(distance);
+    if (d == null || d <= 0) {
+      setDistanceError('Enter the distance you were shooting.');
+      return;
+    }
+    try {
+      await addDopeEntry({
+        sessionId: session.id,
+        distanceYd: distanceToYd(d, distanceUnit),
+        elevationHold: parseDecimal(elevation),
+        windageHold: parseDecimal(windage),
+        holdUnit: turretUnit,
+        groupSizeIn: parseDecimal(groupSize),
+        poiUpIn: null,
+        poiRightIn: null,
+        confirmed: confirmed === 'Confirmed',
+        notes: null,
+      });
+      // Keep the form open — logging several distances in a row is the norm.
+      setDistance('');
+      setElevation('');
+      setWindage('');
+      setGroupSize('');
+      setDistanceError(undefined);
+      distanceRef.current?.focus();
+    } catch (e) {
+      Alert.alert('Could not save DOPE', e instanceof Error ? e.message : String(e));
+    }
   };
 
+  const parsedShots = parseVelocityList(shotsText);
+
   const saveString = async () => {
-    if (chronoMode === 'Per-shot') {
-      const velocities = shotsText
-        .split(/[\s,;]+/)
-        .map((s) => parseFloat(s))
-        .filter((v) => Number.isFinite(v) && v > 0);
-      if (velocities.length === 0) {
-        Alert.alert('No shots', 'Enter velocities separated by spaces or commas.');
-        return;
+    try {
+      if (chronoMode === 'Per-shot') {
+        if (parsedShots.length === 0) {
+          setShotsError('No velocities recognized — separate shots with spaces or commas.');
+          return;
+        }
+        await addShotString({ sessionId: session.id, velocitiesFps: parsedShots });
+      } else {
+        if (parseDecimal(avg) == null) {
+          Alert.alert('Average required', 'Enter at least the average velocity.');
+          return;
+        }
+        await addShotString({
+          sessionId: session.id,
+          summary: { avgFps: parseDecimal(avg), sdFps: parseDecimal(sd), esFps: parseDecimal(es) },
+        });
       }
-      await addShotString({ sessionId: session.id, velocitiesFps: velocities });
-    } else {
-      if (num(avg) == null) {
-        Alert.alert('Average required', 'Enter at least the average velocity.');
-        return;
-      }
-      await addShotString({
-        sessionId: session.id,
-        summary: { avgFps: num(avg), sdFps: num(sd), esFps: num(es) },
-      });
+      setShotsText('');
+      setShotsError(undefined);
+      setAvg('');
+      setSd('');
+      setEs('');
+      setShowChronoForm(false);
+    } catch (e) {
+      Alert.alert('Could not save string', e instanceof Error ? e.message : String(e));
     }
-    setShotsText('');
-    setAvg('');
-    setSd('');
-    setEs('');
-    setShowChronoForm(false);
+  };
+
+  const confirmArchive = () => {
+    Alert.alert(
+      'Archive session?',
+      'The session is hidden from lists and its DOPE no longer feeds range cards.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Archive',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await archiveSession(session.id);
+              router.back();
+            } catch (e) {
+              Alert.alert('Could not archive', e instanceof Error ? e.message : String(e));
+            }
+          },
+        },
+      ],
+    );
   };
 
   const conditions = [
@@ -120,11 +180,14 @@ export default function SessionDetailScreen() {
     .join(' · ');
 
   return (
-    <Screen>
+    <Screen underHeader>
       <Stack.Screen options={{ title: new Date(session.date).toLocaleDateString() }} />
 
       <Card>
         <Text style={type.heading}>{rifle?.name ?? 'Rifle'}</Text>
+        {loadLabel ? (
+          <Text style={[type.secondary, { marginTop: 2, color: colors.accent }]}>{loadLabel}</Text>
+        ) : null}
         <Text style={[type.secondary, { marginTop: 2 }]}>
           {session.location ?? 'No location'}
         </Text>
@@ -141,7 +204,12 @@ export default function SessionDetailScreen() {
       {/* ---- DOPE ---- */}
       <View style={styles.sectionHeader}>
         <Text style={type.label}>DOPE ({turretUnit})</Text>
-        <Pressable onPress={() => setShowDopeForm((s) => !s)} hitSlop={10}>
+        <Pressable
+          onPress={() => setShowDopeForm((s) => !s)}
+          accessibilityRole="button"
+          accessibilityLabel={showDopeForm ? 'Close DOPE entry form' : 'Add DOPE entry'}
+          style={styles.iconBtn}
+        >
           <Ionicons
             name={showDopeForm ? 'close' : 'add-circle'}
             size={26}
@@ -155,10 +223,15 @@ export default function SessionDetailScreen() {
           <Row>
             <Half>
               <NumericField
+                ref={distanceRef}
                 label="Distance"
                 value={distance}
-                onChangeText={setDistance}
+                onChangeText={(v) => {
+                  setDistance(v);
+                  setDistanceError(undefined);
+                }}
                 suffix={distanceUnit}
+                error={distanceError}
                 autoFocus
               />
             </Half>
@@ -168,6 +241,7 @@ export default function SessionDetailScreen() {
                 value={elevation}
                 onChangeText={setElevation}
                 suffix={turretUnit}
+                signed
               />
             </Half>
           </Row>
@@ -178,6 +252,7 @@ export default function SessionDetailScreen() {
                 value={windage}
                 onChangeText={setWindage}
                 suffix={turretUnit}
+                signed
               />
             </Half>
             <Half>
@@ -195,7 +270,17 @@ export default function SessionDetailScreen() {
             value={confirmed}
             onChange={setConfirmed}
           />
-          <Button label="Add DOPE" onPress={saveDope} />
+          <View style={styles.formActions}>
+            <Button label="Add DOPE" onPress={saveDope} style={{ flex: 1 }} />
+            <Pressable
+              onPress={() => setShowDopeForm(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Done adding DOPE"
+              style={styles.doneBtn}
+            >
+              <Text style={styles.doneLabel}>Done</Text>
+            </Pressable>
+          </View>
         </Card>
       ) : null}
 
@@ -204,55 +289,65 @@ export default function SessionDetailScreen() {
           Record the holds that actually worked — they feed this rifle's range card.
         </Text>
       ) : (
-        dope.map((entry) => (
-          <Card key={entry.id}>
-            <View style={styles.dopeRow}>
-              <Text style={[type.heading, { fontVariant: ['tabular-nums'] }]}>
-                {Math.round(ydToDistance(entry.distanceYd, distanceUnit))} {distanceUnit}
-              </Text>
-              <View style={{ flex: 1, marginLeft: spacing.lg }}>
-                <Text style={[type.body, { fontVariant: ['tabular-nums'] }]}>
-                  {entry.elevationHold != null
-                    ? `▲ ${formatHold(entry.elevationHold, turretUnit)}`
-                    : '—'}
-                  {entry.windageHold != null
-                    ? `   ◀▶ ${formatHold(entry.windageHold, turretUnit)}`
-                    : ''}
-                </Text>
-                {entry.groupSizeIn != null ? (
-                  <Text style={type.secondary}>{entry.groupSizeIn}" group</Text>
-                ) : null}
+        dope.map((entry) => {
+          const distLabel = `${Math.round(ydToDistance(entry.distanceYd, distanceUnit))} ${distanceUnit}`;
+          return (
+            <Card key={entry.id}>
+              <View style={styles.dopeRow}>
+                <Text style={[type.heading, { fontVariant: ['tabular-nums'] }]}>{distLabel}</Text>
+                <View style={{ flex: 1, marginLeft: spacing.lg }}>
+                  <Text style={[type.body, { fontVariant: ['tabular-nums'] }]}>
+                    {entry.elevationHold != null
+                      ? `▲ ${formatHold(entry.elevationHold, turretUnit)}`
+                      : '—'}
+                    {entry.windageHold != null
+                      ? `   ◀▶ ${formatHold(entry.windageHold, turretUnit)}`
+                      : ''}
+                  </Text>
+                  {entry.groupSizeIn != null ? (
+                    <Text style={type.secondary}>{entry.groupSizeIn}" group</Text>
+                  ) : null}
+                </View>
+                {entry.confirmed ? (
+                  <Text style={[type.label, { color: colors.confirmed }]}>CONF</Text>
+                ) : (
+                  <Text style={[type.label, { color: colors.predicted }]}>PROV</Text>
+                )}
+                <Pressable
+                  onPress={() =>
+                    Alert.alert('Delete entry?', '', [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: () =>
+                          deleteDopeEntry(entry.id).catch((e: unknown) =>
+                            Alert.alert('Delete failed', e instanceof Error ? e.message : String(e)),
+                          ),
+                      },
+                    ])
+                  }
+                  accessibilityRole="button"
+                  accessibilityLabel={`Delete ${distLabel} entry`}
+                  style={[styles.iconBtn, { marginLeft: spacing.xs }]}
+                >
+                  <Ionicons name="trash-outline" size={22} color={colors.textTertiary} />
+                </Pressable>
               </View>
-              {entry.confirmed ? (
-                <Text style={[type.label, { color: colors.confirmed }]}>CONF</Text>
-              ) : (
-                <Text style={[type.label, { color: colors.predicted }]}>PROV</Text>
-              )}
-              <Pressable
-                onPress={() =>
-                  Alert.alert('Delete entry?', '', [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Delete',
-                      style: 'destructive',
-                      onPress: () => deleteDopeEntry(entry.id),
-                    },
-                  ])
-                }
-                hitSlop={10}
-                style={{ marginLeft: spacing.md }}
-              >
-                <Ionicons name="trash-outline" size={18} color={colors.textTertiary} />
-              </Pressable>
-            </View>
-          </Card>
-        ))
+            </Card>
+          );
+        })
       )}
 
       {/* ---- Chrono strings ---- */}
       <View style={styles.sectionHeader}>
         <Text style={type.label}>Velocity strings</Text>
-        <Pressable onPress={() => setShowChronoForm((s) => !s)} hitSlop={10}>
+        <Pressable
+          onPress={() => setShowChronoForm((s) => !s)}
+          accessibilityRole="button"
+          accessibilityLabel={showChronoForm ? 'Close velocity entry form' : 'Add velocity string'}
+          style={styles.iconBtn}
+        >
           <Ionicons
             name={showChronoForm ? 'close' : 'add-circle'}
             size={26}
@@ -270,13 +365,24 @@ export default function SessionDetailScreen() {
             onChange={setChronoMode}
           />
           {chronoMode === 'Per-shot' ? (
-            <Field
-              label="Velocities (fps)"
-              value={shotsText}
-              onChangeText={setShotsText}
-              placeholder="2701 2698 2711 2695 2704"
-              multiline
-            />
+            <>
+              <Field
+                label="Velocities (fps)"
+                value={shotsText}
+                onChangeText={(v) => {
+                  setShotsText(v);
+                  setShotsError(undefined);
+                }}
+                placeholder="2701 2698 2711 2695 2704"
+                multiline
+                error={shotsError}
+              />
+              {parsedShots.length > 0 ? (
+                <Text style={[type.caption, { marginTop: -spacing.md, marginBottom: spacing.md }]}>
+                  {parsedShots.length} {parsedShots.length === 1 ? 'shot' : 'shots'} parsed
+                </Text>
+              ) : null}
+            </>
           ) : (
             <>
               <NumericField label="Average" value={avg} onChangeText={setAvg} suffix="fps" />
@@ -315,13 +421,18 @@ export default function SessionDetailScreen() {
                   {
                     text: 'Delete',
                     style: 'destructive',
-                    onPress: () => deleteShotString(s.id),
+                    onPress: () =>
+                      deleteShotString(s.id).catch((e: unknown) =>
+                        Alert.alert('Delete failed', e instanceof Error ? e.message : String(e)),
+                      ),
                   },
                 ])
               }
-              hitSlop={10}
+              accessibilityRole="button"
+              accessibilityLabel="Delete velocity string"
+              style={styles.iconBtn}
             >
-              <Ionicons name="trash-outline" size={18} color={colors.textTertiary} />
+              <Ionicons name="trash-outline" size={22} color={colors.textTertiary} />
             </Pressable>
           </View>
         </Card>
@@ -331,10 +442,21 @@ export default function SessionDetailScreen() {
         <Button
           label="View Range Card"
           variant="secondary"
-          onPress={() => router.push(`/range/cards/${rifle.id}`)}
+          onPress={() =>
+            router.push(
+              `/range/cards/${rifle.id}${sessionLoadId ? `?loadId=${sessionLoadId}` : ''}`,
+            )
+          }
           style={{ marginTop: spacing.lg }}
         />
       ) : null}
+
+      <Button
+        label="Archive Session"
+        variant="danger"
+        onPress={confirmArchive}
+        style={{ marginTop: spacing.md }}
+      />
     </Screen>
   );
 }
@@ -348,4 +470,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   dopeRow: { flexDirection: 'row', alignItems: 'center' },
+  iconBtn: {
+    width: touchTarget,
+    height: touchTarget,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  formActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  doneBtn: {
+    minHeight: touchTarget,
+    paddingHorizontal: spacing.lg,
+    justifyContent: 'center',
+  },
+  doneLabel: { color: colors.textSecondary, fontSize: 15, fontWeight: '600' },
 });

@@ -8,7 +8,9 @@ import { CardPreset, presetConfig } from '@/lib/rangecard/presets';
 import { LoadVersion, RangeCard, Rifle } from '@/db/schema';
 
 export type RangeCardState = {
-  status: 'loading' | 'missing-data' | 'ready';
+  status: 'loading' | 'missing-data' | 'ready' | 'error';
+  /** Human-readable failure reason when status is 'error'. */
+  errorMessage: string | null;
   /** What's missing when status is 'missing-data'. */
   missing: string[];
   card: RangeCard | null;
@@ -26,6 +28,7 @@ export type RangeCardState = {
 export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | null): RangeCardState {
   const [state, setState] = useState<Omit<RangeCardState, 'refresh' | 'changePreset' | 'trueUp' | 'clearTrueUp'>>({
     status: 'loading',
+    errorMessage: null,
     missing: [],
     card: null,
     version: null,
@@ -39,9 +42,19 @@ export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | n
 
   useEffect(() => {
     let cancelled = false;
+    // Reset to a clean loading state whenever inputs change so a stale card
+    // from the previous load can't receive preset/true-up writes during the
+    // refetch window.
+    setState((s) => ({
+      ...s,
+      status: 'loading',
+      errorMessage: null,
+      card: null,
+      rows: [],
+      confirmedCount: 0,
+    }));
     (async () => {
       if (!rifle || !loadVersionId) {
-        setState((s) => ({ ...s, status: 'loading' }));
         return;
       }
       const [card, version, observedRaw] = await Promise.all([
@@ -75,6 +88,7 @@ export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | n
       if (missing.length > 0 || !version) {
         setState({
           status: 'missing-data',
+          errorMessage: null,
           missing,
           card,
           version: version ?? null,
@@ -117,6 +131,7 @@ export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | n
 
       setState({
         status: 'ready',
+        errorMessage: null,
         missing: [],
         card,
         version,
@@ -125,7 +140,15 @@ export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | n
         mvFps,
         confirmedCount: rows.filter((r) => r.confirmed).length,
       });
-    })();
+    })().catch((e: unknown) => {
+      // Without this the hook would stay in 'loading' forever on any db error.
+      if (cancelled) return;
+      setState((s) => ({
+        ...s,
+        status: 'error',
+        errorMessage: e instanceof Error ? e.message : String(e),
+      }));
+    });
     return () => {
       cancelled = true;
     };

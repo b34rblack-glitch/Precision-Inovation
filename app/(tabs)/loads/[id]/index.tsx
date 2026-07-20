@@ -6,6 +6,7 @@ import { Button } from '@/components/Buttons';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
 import { archiveLoad, loadByIdQuery, versionsForLoadQuery } from '@/db/repositories/loads';
+import { rifleByIdQuery } from '@/db/repositories/rifles';
 import { workupsForLoadQuery } from '@/db/repositories/workups';
 import { LoadVersion } from '@/db/schema';
 import { colors, spacing, type } from '@/theme';
@@ -61,9 +62,12 @@ export default function LoadDetailScreen() {
   const { data: loadRows } = useLiveQuery(loadByIdQuery(id), [id]);
   const { data: versions } = useLiveQuery(versionsForLoadQuery(id), [id]);
   const { data: loadWorkups } = useLiveQuery(workupsForLoadQuery(id), [id]);
+  const assignedRifleId = loadRows[0]?.rifleId ?? '';
+  const { data: rifleRows } = useLiveQuery(rifleByIdQuery(assignedRifleId), [assignedRifleId]);
   const load = loadRows[0];
-  if (!load) return <Screen>{null}</Screen>;
+  if (!load) return <Screen underHeader>{null}</Screen>;
   const current = versions.find((v) => v.id === load.currentVersionId) ?? versions[0];
+  const assignedRifle = rifleRows[0];
 
   const confirmArchive = () => {
     Alert.alert('Archive load?', `"${load.name}" will be hidden but its history is kept.`, [
@@ -72,25 +76,46 @@ export default function LoadDetailScreen() {
         text: 'Archive',
         style: 'destructive',
         onPress: async () => {
-          await archiveLoad(load.id);
-          router.back();
+          try {
+            await archiveLoad(load.id);
+            router.back();
+          } catch (e) {
+            Alert.alert('Save failed', e instanceof Error ? e.message : String(e));
+          }
         },
       },
     ]);
   };
 
   return (
-    <Screen>
+    <Screen underHeader>
       <Stack.Screen
         options={{
           title: load.name,
           headerRight: () => (
-            <Pressable onPress={() => router.push(`/loads/${load.id}/edit`)} hitSlop={12}>
+            <Pressable
+              onPress={() => router.push(`/loads/${load.id}/edit`)}
+              hitSlop={14}
+              accessibilityRole="button"
+              accessibilityLabel="Edit load"
+            >
               <Ionicons name="pencil" size={20} color={colors.accent} />
             </Pressable>
           ),
         }}
       />
+
+      {assignedRifle ? (
+        <Card onPress={() => router.push(`/rifles/${assignedRifle.id}`)}>
+          <View style={styles.rifleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={type.label}>Rifle</Text>
+              <Text style={[type.body, { marginTop: 2 }]}>{assignedRifle.name}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+          </View>
+        </Card>
+      ) : null}
 
       {current ? (
         <Card>
@@ -110,8 +135,26 @@ export default function LoadDetailScreen() {
       <Button
         label="Start a Workup"
         onPress={() => router.push(`/loads/${load.id}/workups/new`)}
-        style={{ marginBottom: spacing.lg }}
+        style={{ marginBottom: load.rifleId ? spacing.md : spacing.lg }}
       />
+
+      {load.rifleId ? (
+        <View style={{ marginBottom: spacing.lg, gap: spacing.md }}>
+          {load.currentVersionId ? (
+            <Button
+              label="Range Card"
+              onPress={() => router.push(`/range/cards/${load.rifleId}?loadId=${load.id}`)}
+            />
+          ) : null}
+          <Button
+            label="Log Range Session"
+            variant="secondary"
+            onPress={() =>
+              router.push(`/range/sessions/new?rifleId=${load.rifleId}&loadId=${load.id}`)
+            }
+          />
+        </View>
+      ) : null}
 
       <Text style={[type.label, { marginBottom: spacing.sm }]}>Workups</Text>
       {loadWorkups.length === 0 ? (
@@ -175,6 +218,7 @@ export default function LoadDetailScreen() {
 
 const styles = StyleSheet.create({
   compRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
+  rifleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   versionBadgeRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

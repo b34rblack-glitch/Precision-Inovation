@@ -33,18 +33,38 @@ const TABLES = {
 } as const;
 
 type TableName = keyof typeof TABLES;
-const TABLE_ORDER: TableName[] = [
+
+// Parents strictly before children (FK order) so restore can insert in this
+// order and delete in exact reverse:
+//   loads -> rifles; loadVersions -> loads; workups -> rifles/loads/loadVersions;
+//   workupSteps -> workups; rangeSessions -> rifles/loadVersions;
+//   shotStrings -> workupSteps/rangeSessions; shots -> shotStrings;
+//   dopeEntries -> rangeSessions; rangeCards -> rifles/loadVersions.
+export const TABLE_ORDER: readonly TableName[] = [
   'rifles',
   'loads',
   'loadVersions',
   'workups',
   'workupSteps',
+  'rangeSessions',
   'shotStrings',
   'shots',
-  'rangeSessions',
   'dopeEntries',
   'rangeCards',
 ];
+
+/** Max rows per INSERT .values() call, to stay under SQLite's bind-variable limit. */
+export const INSERT_CHUNK_SIZE = 500;
+
+/** Split rows into chunks of at most `size` (pure; exported for tests). */
+export function chunkRows<T>(rows: readonly T[], size: number): T[][] {
+  if (size < 1) throw new Error(`chunkRows: size must be >= 1, got ${size}`);
+  const chunks: T[][] = [];
+  for (let i = 0; i < rows.length; i += size) {
+    chunks.push(rows.slice(i, i + size));
+  }
+  return chunks;
+}
 
 export type Backup = {
   schemaVersion: number;
@@ -81,7 +101,13 @@ export async function exportBackup(): Promise<void> {
   }
 }
 
-/** Replaces ALL current data with the backup contents. Caller confirms first. */
+/**
+ * Replaces ALL current data with the backup contents. Caller confirms first.
+ *
+ * The wipe + reload runs inside a single synchronous transaction (drizzle's
+ * expo-sqlite driver only supports sync transactions), so any failure rolls
+ * the database back to its pre-restore state instead of leaving it wiped.
+ */
 export async function restoreBackup(json: string): Promise<{ counts: Record<string, number> }> {
   const parsed = JSON.parse(json) as Backup;
   if (parsed.app !== 'precision-innovation' || !parsed.tables) {
@@ -92,17 +118,23 @@ export async function restoreBackup(json: string): Promise<{ counts: Record<stri
   }
 
   const counts: Record<string, number> = {};
-  // Delete children before parents; insert parents before children.
-  for (const name of [...TABLE_ORDER].reverse()) {
-    await db.delete(TABLES[name] as never);
-  }
-  for (const name of TABLE_ORDER) {
-    const rows = (parsed.tables[name] ?? []) as Record<string, unknown>[];
-    counts[name] = rows.length;
-    if (rows.length === 0) continue;
-    const revived = rows.map((r) => reviveDates(r));
-    await db.insert(TABLES[name] as never).values(revived as never);
-  }
+  db.transaction((tx) => {
+    // Delete children before parents; insert parents before children.
+    for (const name of [...TABLE_ORDER].reverse()) {
+      tx.delete(TABLES[name] as never).run();
+    }
+    for (const name of TABLE_ORDER) {
+      const rows = (parsed.tables[name] ?? []) as Record<string, unknown>[];
+      counts[name] = rows.length;
+      if (rows.length === 0) continue;
+      const revived = rows.map((r) => reviveDates(r));
+      for (const chunk of chunkRows(revived, INSERT_CHUNK_SIZE)) {
+        tx.insert(TABLES[name] as never)
+          .values(chunk as never)
+          .run();
+      }
+    }
+  });
   return { counts };
 }
 
