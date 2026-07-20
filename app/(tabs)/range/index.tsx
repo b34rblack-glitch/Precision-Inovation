@@ -69,11 +69,19 @@ export default function RangeScreen() {
         ) : null}
 
         {sessionsLoadedAt && sessions.length === 0 ? (
-          <EmptyState
-            icon="analytics"
-            title="No sessions yet"
-            message="Log a range session to start building real DOPE for your rifle and load."
-          />
+          cardRifles.length === 0 ? (
+            // Whole tab is empty — the full-screen prompt is warranted.
+            <EmptyState
+              icon="analytics"
+              title="No sessions yet"
+              message="Log a range session to start building real DOPE for your rifle and load."
+            />
+          ) : (
+            // Just the Sessions subsection under existing cards — stay compact.
+            <Text style={[type.secondary, { marginTop: spacing.xs }]}>
+              No sessions yet — tap + to log one
+            </Text>
+          )
         ) : (
           sessions.map((s) => (
             <Card key={s.id} onPress={() => router.push(`/range/sessions/${s.id}`)}>

@@ -38,6 +38,10 @@ export default function FieldCardScreen() {
           <Text style={styles.subtitle}>
             {rifle.turretUnit} · W10 = full value 10 mph · screen stays awake
           </Text>
+          <Text style={styles.legend}>
+            <Text style={{ color: colors.fieldText }}>●</Text> bright = confirmed · dim =
+            predicted · ‡ transonic · ‡‡ subsonic
+          </Text>
         </View>
         <Pressable
           onPress={() => router.back()}
@@ -50,33 +54,48 @@ export default function FieldCardScreen() {
       </View>
 
       {status === 'ready' ? (
-        <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
-          {rows.map((r) => {
-            const dist = Math.round(ydToDistance(r.distanceYd, rifle.distanceUnit));
-            return (
-              <View
-                key={r.distanceYd}
-                accessible={true}
-                accessibilityLabel={`${dist} ${unitWord}, hold ${formatHold(r.elevation, rifle.turretUnit)} ${rifle.turretUnit}, ${r.confirmed ? 'confirmed' : 'predicted'}`}
-                style={styles.row}
-              >
-                <Text style={styles.dist} maxFontSizeMultiplier={1.2}>
-                  {dist}
-                </Text>
-                <Text
-                  style={[styles.hold, !r.confirmed && styles.holdPred]}
-                  maxFontSizeMultiplier={1.2}
+        <>
+          <View style={styles.colHeader}>
+            <Text style={styles.colHeadDist}>DIST</Text>
+            <Text style={styles.colHeadHold}>ELEV</Text>
+            <Text style={styles.colHeadWind}>W10</Text>
+          </View>
+          <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
+            {rows.map((r) => {
+              const dist = Math.round(ydToDistance(r.distanceYd, rifle.distanceUnit));
+              const subsonic = r.mach < 1.0;
+              const transonic = r.mach < 1.2;
+              const machMark = subsonic ? ' ‡‡' : transonic ? ' ‡' : '';
+              const machWord = subsonic ? ', subsonic' : transonic ? ', transonic' : '';
+              // Only dim *predictions* in the transonic zone — confirmed DOPE
+              // stays bright because it was actually observed.
+              const dimPred = transonic && !r.confirmed;
+              return (
+                <View
+                  key={r.distanceYd}
+                  accessible={true}
+                  accessibilityLabel={`${dist} ${unitWord}, hold ${formatHold(r.elevation, rifle.turretUnit)} ${rifle.turretUnit}, ${r.confirmed ? 'confirmed' : 'predicted'}, wind ten ${formatHold(r.wind10Mph, rifle.turretUnit)} ${rifle.turretUnit}${machWord}`}
+                  style={[styles.row, dimPred && styles.transonicRow]}
                 >
-                  {formatHold(r.elevation, rifle.turretUnit)}
-                  <Text style={styles.marker}>{r.confirmed ? ' ●' : ''}</Text>
-                </Text>
-                <Text style={styles.wind} maxFontSizeMultiplier={1.2}>
-                  {formatHold(r.wind10Mph, rifle.turretUnit)}
-                </Text>
-              </View>
-            );
-          })}
-        </ScrollView>
+                  <Text style={styles.dist} maxFontSizeMultiplier={1.2}>
+                    {dist}
+                    <Text style={styles.machMark}>{machMark}</Text>
+                  </Text>
+                  <Text
+                    style={[styles.hold, !r.confirmed && styles.holdPred]}
+                    maxFontSizeMultiplier={1.2}
+                  >
+                    {formatHold(r.elevation, rifle.turretUnit)}
+                    <Text style={styles.marker}>{r.confirmed ? ' ●' : ''}</Text>
+                  </Text>
+                  <Text style={styles.wind} maxFontSizeMultiplier={1.2}>
+                    {formatHold(r.wind10Mph, rifle.turretUnit)}
+                  </Text>
+                </View>
+              );
+            })}
+          </ScrollView>
+        </>
       ) : status === 'loading' ? (
         <ActivityIndicator color={colors.fieldText} style={{ marginTop: 48 }} />
       ) : (
@@ -93,7 +112,32 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   title: { color: colors.fieldText, fontSize: 22, fontWeight: '900', letterSpacing: 1 },
   subtitle: { color: '#B38600', fontSize: 13, marginTop: 2 },
+  legend: { color: colors.predicted, fontSize: 11, marginTop: 3 },
   closeBtn: { padding: 9 },
+  colHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#332800',
+    paddingBottom: 6,
+  },
+  colHeadDist: { minWidth: 92, color: '#B38600', fontSize: 12, fontWeight: '700', letterSpacing: 1 },
+  colHeadHold: {
+    flex: 1,
+    textAlign: 'right',
+    color: '#B38600',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  colHeadWind: {
+    minWidth: 92,
+    textAlign: 'right',
+    color: '#B38600',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -101,6 +145,7 @@ const styles = StyleSheet.create({
     borderBottomColor: '#332800',
     paddingVertical: 10,
   },
+  transonicRow: { opacity: 0.55 },
   dist: {
     minWidth: 92,
     flexShrink: 0,

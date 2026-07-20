@@ -11,6 +11,7 @@ import { loadByIdQuery, versionsForLoadQuery } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { createWorkup } from '@/db/repositories/workups';
 import { parseDecimal } from '@/lib/parse';
+import { distanceToYd } from '@/lib/units';
 import {
   DEFAULT_SHOTS_PER_CHARGE,
   DEFAULT_STEP_COUNT,
