@@ -11,7 +11,10 @@ import { colors, radii, spacing, type } from '@/theme';
 
 export default function RiflesScreen() {
   const router = useRouter();
-  const { data: rifles } = useLiveQuery(activeRiflesQuery());
+  // updatedAt is undefined until the live query's first emission — gate the
+  // empty state on it so it doesn't flash before data arrives.
+  const { data: rifles, updatedAt } = useLiveQuery(activeRiflesQuery());
+  const loading = updatedAt === undefined;
 
   return (
     <>
@@ -19,12 +22,17 @@ export default function RiflesScreen() {
         title="Rifles"
         fabClearance
         headerRight={
-          <Pressable onPress={() => router.push('/settings')} hitSlop={12}>
+          <Pressable
+            onPress={() => router.push('/settings')}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+          >
             <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
           </Pressable>
         }
       >
-        {rifles.length === 0 ? (
+        {loading ? null : rifles.length === 0 ? (
           <EmptyState
             icon="locate"
             title="No rifles yet"
@@ -58,7 +66,7 @@ export default function RiflesScreen() {
           ))
         )}
       </Screen>
-      <Fab onPress={() => router.push('/rifles/new')} />
+      <Fab onPress={() => router.push('/rifles/new')} accessibilityLabel="Add rifle" />
     </>
   );
 }

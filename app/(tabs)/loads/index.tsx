@@ -12,8 +12,11 @@ import { colors, spacing, type } from '@/theme';
 
 export default function LoadsScreen() {
   const router = useRouter();
-  const { data: loads } = useLiveQuery(activeLoadsQuery());
+  // updatedAt is undefined until the live query's first emission — gate the
+  // empty state on it so it doesn't flash before data arrives.
+  const { data: loads, updatedAt } = useLiveQuery(activeLoadsQuery());
   const { data: rifles } = useLiveQuery(activeRiflesQuery());
+  const loading = updatedAt === undefined;
   const rifleName = (id: string | null) => rifles.find((r) => r.id === id)?.name;
 
   return (
@@ -22,12 +25,17 @@ export default function LoadsScreen() {
         title="Loads"
         fabClearance
         headerRight={
-          <Pressable onPress={() => router.push('/settings')} hitSlop={12}>
+          <Pressable
+            onPress={() => router.push('/settings')}
+            hitSlop={12}
+            accessibilityRole="button"
+            accessibilityLabel="Settings"
+          >
             <Ionicons name="settings-outline" size={24} color={colors.textSecondary} />
           </Pressable>
         }
       >
-        {loads.length === 0 ? (
+        {loading ? null : loads.length === 0 ? (
           <EmptyState
             icon="flask"
             title="No loads yet"
@@ -50,7 +58,7 @@ export default function LoadsScreen() {
           ))
         )}
       </Screen>
-      <Fab onPress={() => router.push('/loads/new')} />
+      <Fab onPress={() => router.push('/loads/new')} accessibilityLabel="Add load" />
     </>
   );
 }

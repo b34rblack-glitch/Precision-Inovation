@@ -2,13 +2,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
 import { Button } from '@/components/Buttons';
 import { Card } from '@/components/Card';
+import { Chip } from '@/components/Chip';
 import { Screen } from '@/components/Screen';
 import { addShotString, deleteShotString } from '@/db/repositories/sessions';
 import {
+  archiveWorkup,
   promoteChargeToVersion,
   stepsForWorkupQuery,
   stringsForStepsQuery,
@@ -17,6 +19,7 @@ import {
   workupByIdQuery,
 } from '@/db/repositories/workups';
 import { WorkupStep } from '@/db/schema';
+import { parseDecimal, parseVelocityList } from '@/lib/parse';
 import { ChargePoint, findFlatSpots } from '@/lib/workup/stats';
 import { colors, radii, spacing, type } from '@/theme';
 
@@ -26,6 +29,9 @@ const TITLES: Record<string, string> = {
   velocity: 'Velocity Ladder',
   freeform: 'Workup',
 };
+
+const saveFailed = (e: unknown) =>
+  Alert.alert('Save failed', e instanceof Error ? e.message : String(e));
 
 function StepCard({
   step,
@@ -38,36 +44,75 @@ function StepCard({
   step: WorkupStep;
   showGroup: boolean;
   summary: { avgFps: number | null; sdFps: number | null; esFps: number | null; shotCount: number | null } | null;
-  onSaveVelocities: (velocities: number[]) => void;
-  onSaveGroup: (groupSizeIn: number | null) => void;
-  onClearString: () => void;
+  onSaveVelocities: (velocities: number[]) => Promise<void>;
+  onSaveGroup: (groupSizeIn: number | null) => Promise<void>;
+  onClearString: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [velText, setVelText] = useState('');
+  const [velError, setVelError] = useState<string | undefined>();
   const [groupText, setGroupText] = useState(step.groupSizeIn?.toString() ?? '');
+  const [groupError, setGroupError] = useState<string | undefined>();
+  const [saving, setSaving] = useState(false);
 
-  const save = () => {
-    const velocities = velText
-      .split(/[\s,;]+/)
-      .map((s) => parseFloat(s))
-      .filter((v) => Number.isFinite(v) && v > 0);
-    if (velocities.length > 0) onSaveVelocities(velocities);
-    if (showGroup) {
-      const g = parseFloat(groupText);
-      onSaveGroup(Number.isFinite(g) ? g : null);
+  const parsedVelocities = useMemo(
+    () => (velText.trim() ? parseVelocityList(velText) : []),
+    [velText],
+  );
+
+  const save = async () => {
+    // Validate everything before saving anything.
+    if (velText.trim() !== '' && parsedVelocities.length === 0) {
+      setVelError("Couldn't read any velocities");
+      return;
     }
-    setVelText('');
-    setOpen(false);
+    const groupSize = parseDecimal(groupText);
+    if (showGroup && groupText.trim() !== '' && groupSize === null) {
+      setGroupError('Enter a number like 0.75');
+      return;
+    }
+    setSaving(true);
+    try {
+      if (parsedVelocities.length > 0) await onSaveVelocities(parsedVelocities);
+      if (showGroup) await onSaveGroup(groupSize);
+      setVelText('');
+      setOpen(false);
+    } catch (e) {
+      saveFailed(e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const clear = async () => {
+    setSaving(true);
+    try {
+      await onClearString();
+    } catch (e) {
+      saveFailed(e);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const hasData = summary?.avgFps != null || step.groupSizeIn != null;
+  const chargeLabel = `${step.chargeGr.toFixed(2).replace(/0$/, '')} gr`;
 
   return (
     <Card>
-      <Pressable onPress={() => setOpen((o) => !o)} style={styles.stepHeader}>
-        <Text style={[type.heading, { fontVariant: ['tabular-nums'] }]}>
-          {step.chargeGr.toFixed(2).replace(/0$/, '')} gr
-        </Text>
+      <Pressable
+        onPress={() => setOpen((o) => !o)}
+        style={styles.stepHeader}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={
+          `${step.chargeGr} grains, ` +
+          (summary?.avgFps != null
+            ? `average ${Math.round(summary.avgFps)} feet per second`
+            : 'no data yet')
+        }
+      >
+        <Text style={[type.heading, { fontVariant: ['tabular-nums'] }]}>{chargeLabel}</Text>
         <View style={{ flex: 1, marginLeft: spacing.lg }}>
           {summary?.avgFps != null ? (
             <Text style={[type.body, { fontVariant: ['tabular-nums'] }]}>
@@ -93,30 +138,45 @@ function StepCard({
         <View style={{ marginTop: spacing.md }}>
           <Text style={type.label}>Velocities (fps)</Text>
           <TextInput
-            style={styles.velInput}
+            style={[styles.velInput, velError ? { borderColor: colors.danger } : null]}
             value={velText}
-            onChangeText={setVelText}
+            onChangeText={(v) => {
+              setVelText(v);
+              setVelError(undefined);
+            }}
             placeholder="2701 2698 2711"
             placeholderTextColor={colors.textTertiary}
+            keyboardType={Platform.select({ ios: 'numbers-and-punctuation', default: 'default' })}
             multiline
           />
+          {velError ? (
+            <Text style={styles.errorText}>{velError}</Text>
+          ) : velText.trim() ? (
+            <Text style={styles.previewText}>
+              {parsedVelocities.length} {parsedVelocities.length === 1 ? 'shot' : 'shots'} parsed
+            </Text>
+          ) : null}
           {showGroup ? (
             <>
               <Text style={[type.label, { marginTop: spacing.sm }]}>Group size (in)</Text>
               <TextInput
-                style={styles.velInput}
+                style={[styles.velInput, groupError ? { borderColor: colors.danger } : null]}
                 value={groupText}
-                onChangeText={setGroupText}
+                onChangeText={(v) => {
+                  setGroupText(v);
+                  setGroupError(undefined);
+                }}
                 keyboardType="decimal-pad"
                 placeholder="0.75"
                 placeholderTextColor={colors.textTertiary}
               />
+              {groupError ? <Text style={styles.errorText}>{groupError}</Text> : null}
             </>
           ) : null}
           <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.md }}>
-            <Button label="Save" onPress={save} style={{ flex: 1 }} />
+            <Button label="Save" onPress={save} loading={saving} style={{ flex: 1 }} />
             {summary?.avgFps != null ? (
-              <Button label="Clear" variant="secondary" onPress={onClearString} />
+              <Button label="Clear" variant="secondary" onPress={clear} disabled={saving} />
             ) : null}
           </View>
         </View>
@@ -195,6 +255,8 @@ export default function WorkupDetailScreen() {
   const { data: steps } = useLiveQuery(stepsForWorkupQuery(wid), [wid]);
   const { data: stepStrings } = useLiveQuery(stringsForStepsQuery(wid), [wid]);
   const workup = workupRows[0];
+  const [promoting, setPromoting] = useState(false);
+  const [completing, setCompleting] = useState(false);
 
   const summaries = useMemo(() => {
     const map = new Map<
@@ -226,10 +288,11 @@ export default function WorkupDetailScreen() {
     [chargePoints],
   );
 
-  if (!workup) return <Screen>{null}</Screen>;
+  if (!workup) return <Screen underHeader>{null}</Screen>;
   const showGroup = workup.type === 'ocw' || workup.type === 'ladder';
 
   const promote = (chargeGr: number) => {
+    if (promoting) return;
     Alert.alert(
       `Promote ${chargeGr} gr?`,
       'This becomes the new current version of the load, ready for confirmation and DOPE.',
@@ -238,16 +301,62 @@ export default function WorkupDetailScreen() {
         {
           text: 'Promote',
           onPress: async () => {
-            await promoteChargeToVersion(workup.id, chargeGr);
-            router.replace(`/loads/${loadId}`);
+            setPromoting(true);
+            try {
+              await promoteChargeToVersion(workup.id, chargeGr);
+              router.back();
+              Alert.alert(`Promoted ${chargeGr} gr`, 'Confirm it at the range when you can.', [
+                { text: 'Done', style: 'cancel' },
+                {
+                  text: 'Start Range Session',
+                  onPress: () =>
+                    router.push(
+                      `/range/sessions/new?rifleId=${workup.rifleId}&loadId=${loadId}`,
+                    ),
+                },
+              ]);
+            } catch (e) {
+              saveFailed(e);
+            } finally {
+              setPromoting(false);
+            }
           },
         },
       ],
     );
   };
 
+  const markComplete = async () => {
+    setCompleting(true);
+    try {
+      await updateWorkupStatus(workup.id, 'complete');
+    } catch (e) {
+      saveFailed(e);
+    } finally {
+      setCompleting(false);
+    }
+  };
+
+  const confirmArchive = () => {
+    Alert.alert('Archive workup?', 'It will be hidden from this load, but its data is kept.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Archive',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await archiveWorkup(workup.id);
+            router.back();
+          } catch (e) {
+            saveFailed(e);
+          }
+        },
+      },
+    ]);
+  };
+
   return (
-    <Screen>
+    <Screen underHeader>
       <Stack.Screen options={{ title: TITLES[workup.type] ?? 'Workup' }} />
 
       <Card>
@@ -264,10 +373,20 @@ export default function WorkupDetailScreen() {
       {chargePoints.length >= 3 ? (
         <Card>
           <Text style={[type.label, { marginBottom: spacing.sm }]}>Velocity vs charge</Text>
-          <VelocityChart
-            points={chargePoints}
-            flatCenters={flatSpots.map((f) => f.centerChargeGr)}
-          />
+          <View
+            accessible
+            accessibilityLabel={
+              `Velocity versus charge chart, ${chargePoints.length} charges plotted` +
+              (flatSpots.length > 0
+                ? `, flat spots near ${flatSpots.map((f) => f.centerChargeGr).join(', ')} grains`
+                : ', no flat spots detected yet')
+            }
+          >
+            <VelocityChart
+              points={chargePoints}
+              flatCenters={flatSpots.map((f) => f.centerChargeGr)}
+            />
+          </View>
           {flatSpots.length > 0 ? (
             flatSpots.map((f) => (
               <View key={f.centerChargeGr} style={styles.flatRow}>
@@ -282,7 +401,11 @@ export default function WorkupDetailScreen() {
                     {f.spreadFps.toFixed(0)} fps spread across the window
                   </Text>
                 </View>
-                <Button label="Promote" onPress={() => promote(f.centerChargeGr)} />
+                <Button
+                  label="Promote"
+                  onPress={() => promote(f.centerChargeGr)}
+                  loading={promoting}
+                />
               </View>
             ))
           ) : (
@@ -318,10 +441,20 @@ export default function WorkupDetailScreen() {
       <Text style={[type.label, { marginVertical: spacing.sm }]}>Pick a winner manually</Text>
       <View style={styles.chipWrap}>
         {steps.map((s) => (
-          <Pressable key={s.id} onPress={() => promote(s.chargeGr)} style={styles.chip}>
-            <Text style={styles.chipLabel}>{s.chargeGr} gr</Text>
-          </Pressable>
+          <Chip key={s.id} label={`${s.chargeGr} gr`} onPress={() => promote(s.chargeGr)} />
         ))}
+      </View>
+
+      <View style={styles.footer}>
+        {workup.status !== 'complete' ? (
+          <Button
+            label="Mark Complete"
+            variant="secondary"
+            onPress={markComplete}
+            loading={completing}
+          />
+        ) : null}
+        <Button label="Archive Workup" variant="danger" onPress={confirmArchive} />
       </View>
     </Screen>
   );
@@ -341,6 +474,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     minHeight: 44,
   },
+  errorText: { ...type.caption, color: colors.danger, marginTop: spacing.xs },
+  previewText: { ...type.caption, color: colors.textSecondary, marginTop: spacing.xs },
   flatRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -351,15 +486,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
+  },
+  footer: {
+    marginTop: spacing.xl,
     marginBottom: spacing.xxl,
+    gap: spacing.md,
   },
-  chip: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm + 2,
-    borderRadius: radii.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  chipLabel: { color: colors.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'] },
 });

@@ -3,12 +3,14 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Buttons';
+import { Chip } from '@/components/Chip';
 import { Half, NumericField, Row, Stepper } from '@/components/Form';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
-import { loadByIdQuery } from '@/db/repositories/loads';
+import { loadByIdQuery, versionsForLoadQuery } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { createWorkup } from '@/db/repositories/workups';
+import { parseDecimal } from '@/lib/parse';
 import {
   DEFAULT_SHOTS_PER_CHARGE,
   DEFAULT_STEP_COUNT,
@@ -16,7 +18,7 @@ import {
   totalRounds,
   WorkupType,
 } from '@/lib/workup/seriesGenerator';
-import { colors, radii, spacing, touchTarget, type } from '@/theme';
+import { colors, radii, spacing, type } from '@/theme';
 
 const METHODS: { key: Exclude<WorkupType, 'freeform'>; title: string; blurb: string }[] = [
   {
@@ -40,23 +42,33 @@ export default function NewWorkupScreen() {
   const { id: loadId } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { data: loadRows } = useLiveQuery(loadByIdQuery(loadId), [loadId]);
+  const { data: versions } = useLiveQuery(versionsForLoadQuery(loadId), [loadId]);
   const { data: rifles } = useLiveQuery(activeRiflesQuery());
   const load = loadRows[0];
 
   const [method, setMethod] = useState<Exclude<WorkupType, 'freeform'>>('velocity');
   const [rifleId, setRifleId] = useState<string | null>(null);
-  const [startCharge, setStartCharge] = useState(40.0);
+  // null until the user touches it — seeded from the load's current recipe charge.
+  const [startCharge, setStartCharge] = useState<number | null>(null);
   const [increment, setIncrement] = useState(0.3);
   const [stepCount, setStepCount] = useState(DEFAULT_STEP_COUNT.velocity);
   const [distance, setDistance] = useState('');
+  const [distanceError, setDistanceError] = useState<string | undefined>();
+  const [creating, setCreating] = useState(false);
 
-  if (!load) return <Screen>{null}</Screen>;
+  if (!load) return <Screen underHeader>{null}</Screen>;
   const effectiveRifleId = rifleId ?? load.rifleId ?? rifles[0]?.id ?? null;
+  const currentVersion = versions.find((v) => v.id === load.currentVersionId);
+  const effectiveStartCharge = startCharge ?? currentVersion?.chargeGr ?? 40;
 
-  const series = generateChargeSeries({ startChargeGr: startCharge, incrementGr: increment, stepCount });
+  const series = generateChargeSeries({
+    startChargeGr: effectiveStartCharge,
+    incrementGr: increment,
+    stepCount,
+  });
   const shotsPerCharge = DEFAULT_SHOTS_PER_CHARGE[method];
   const rounds = totalRounds({
-    startChargeGr: startCharge,
+    startChargeGr: effectiveStartCharge,
     incrementGr: increment,
     stepCount,
     shotsPerCharge,
@@ -64,26 +76,45 @@ export default function NewWorkupScreen() {
 
   const create = async () => {
     if (!effectiveRifleId) {
-      Alert.alert('No rifle', 'Add a rifle first — a workup is always shot from a specific rifle.');
+      Alert.alert(
+        'No rifle',
+        'Add a rifle first — a workup is always shot from a specific rifle.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Add Rifle', onPress: () => router.push('/rifles/new') },
+        ],
+      );
       return;
     }
-    const workup = await createWorkup({
-      rifleId: effectiveRifleId,
-      loadId: load.id,
-      baseVersionId: load.currentVersionId,
-      type: method,
-      startChargeGr: startCharge,
-      incrementGr: increment,
-      stepCount,
-      shotsPerCharge,
-      distanceYd: parseFloat(distance) || (method === 'ladder' ? 300 : 100),
-      notes: null,
-    });
-    router.replace(`/loads/${load.id}/workups/${workup.id}`);
+    const distanceYd = parseDecimal(distance);
+    if (distance.trim() !== '' && distanceYd === null) {
+      setDistanceError('Enter a number like 100');
+      return;
+    }
+    setCreating(true);
+    try {
+      const workup = await createWorkup({
+        rifleId: effectiveRifleId,
+        loadId: load.id,
+        baseVersionId: load.currentVersionId,
+        type: method,
+        startChargeGr: effectiveStartCharge,
+        incrementGr: increment,
+        stepCount,
+        shotsPerCharge,
+        distanceYd: distanceYd ?? (method === 'ladder' ? 300 : 100),
+        notes: null,
+      });
+      router.replace(`/loads/${load.id}/workups/${workup.id}`);
+    } catch (e) {
+      Alert.alert('Save failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setCreating(false);
+    }
   };
 
   return (
-    <Screen>
+    <Screen underHeader>
       <Text style={[type.label, { marginBottom: spacing.sm }]}>Method</Text>
       {METHODS.map((m) => (
         <Pressable
@@ -92,6 +123,8 @@ export default function NewWorkupScreen() {
             setMethod(m.key);
             setStepCount(DEFAULT_STEP_COUNT[m.key]);
           }}
+          accessibilityRole="radio"
+          accessibilityState={{ checked: method === m.key }}
           style={[styles.method, method === m.key && styles.methodActive]}
         >
           <Text style={[type.heading, method === m.key && { color: colors.accent }]}>
@@ -108,17 +141,12 @@ export default function NewWorkupScreen() {
           </Text>
           <View style={styles.chipWrap}>
             {rifles.map((r) => (
-              <Pressable
+              <Chip
                 key={r.id}
+                label={r.name}
+                selected={effectiveRifleId === r.id}
                 onPress={() => setRifleId(r.id)}
-                style={[styles.chip, effectiveRifleId === r.id && styles.chipActive]}
-              >
-                <Text
-                  style={[styles.chipLabel, effectiveRifleId === r.id && styles.chipLabelActive]}
-                >
-                  {r.name}
-                </Text>
-              </Pressable>
+              />
             ))}
           </View>
         </>
@@ -127,7 +155,7 @@ export default function NewWorkupScreen() {
       <View style={{ marginTop: spacing.lg }}>
         <Stepper
           label="Start charge"
-          value={startCharge}
+          value={effectiveStartCharge}
           step={0.5}
           decimals={1}
           suffix="gr"
@@ -155,9 +183,13 @@ export default function NewWorkupScreen() {
             <NumericField
               label="Test distance"
               value={distance}
-              onChangeText={setDistance}
+              onChangeText={(v) => {
+                setDistance(v);
+                setDistanceError(undefined);
+              }}
               placeholder={method === 'ladder' ? '300' : '100'}
               suffix="yd"
+              error={distanceError}
             />
           </Half>
           <Half>
@@ -181,7 +213,7 @@ export default function NewWorkupScreen() {
         </Text>
       </Card>
 
-      <Button label="Create Workup" onPress={create} />
+      <Button label="Create Workup" onPress={create} loading={creating} />
     </Screen>
   );
 }
@@ -197,16 +229,4 @@ const styles = StyleSheet.create({
   },
   methodActive: { borderColor: colors.accent },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  chip: {
-    minHeight: touchTarget - 8,
-    paddingHorizontal: spacing.lg,
-    justifyContent: 'center',
-    borderRadius: radii.md,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
-  chipLabel: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  chipLabelActive: { color: colors.onAccent },
 });

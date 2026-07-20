@@ -27,7 +27,7 @@ export default function RifleDetailScreen() {
   const { data: rifleLoads } = useLiveQuery(loadsForRifleQuery(id), [id]);
   const { data: sessions } = useLiveQuery(recentSessionsForRifleQuery(id, 5), [id]);
   const rifle = data[0];
-  if (!rifle) return <Screen>{null}</Screen>;
+  if (!rifle) return <Screen underHeader>{null}</Screen>;
 
   const confirmArchive = () => {
     Alert.alert('Archive rifle?', `"${rifle.name}" will be hidden but its history is kept.`, [
@@ -36,20 +36,29 @@ export default function RifleDetailScreen() {
         text: 'Archive',
         style: 'destructive',
         onPress: async () => {
-          await archiveRifle(rifle.id);
-          router.back();
+          try {
+            await archiveRifle(rifle.id);
+            router.back();
+          } catch (e) {
+            Alert.alert('Save failed', e instanceof Error ? e.message : String(e));
+          }
         },
       },
     ]);
   };
 
   return (
-    <Screen>
+    <Screen underHeader>
       <Stack.Screen
         options={{
           title: rifle.name,
           headerRight: () => (
-            <Pressable onPress={() => router.push(`/rifles/${rifle.id}/edit`)} hitSlop={12}>
+            <Pressable
+              onPress={() => router.push(`/rifles/${rifle.id}/edit`)}
+              hitSlop={14}
+              accessibilityRole="button"
+              accessibilityLabel="Edit rifle"
+            >
               <Ionicons name="pencil" size={20} color={colors.accent} />
             </Pressable>
           ),
@@ -91,9 +100,12 @@ export default function RifleDetailScreen() {
 
       <Text style={[type.label, { marginBottom: spacing.sm }]}>Loads for this rifle</Text>
       {rifleLoads.length === 0 ? (
-        <Text style={[type.secondary, { marginBottom: spacing.lg }]}>
-          No loads yet — create one in the Loads tab.
-        </Text>
+        <Button
+          label="New Load for this Rifle"
+          variant="secondary"
+          onPress={() => router.push(`/loads/new?rifleId=${rifle.id}`)}
+          style={{ marginBottom: spacing.lg }}
+        />
       ) : (
         rifleLoads.map((load) => (
           <Card key={load.id} onPress={() => router.push(`/loads/${load.id}`)}>

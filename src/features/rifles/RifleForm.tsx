@@ -1,9 +1,12 @@
 import * as ImagePicker from 'expo-image-picker';
+import { useNavigation } from 'expo-router';
+import { usePreventRemove } from 'expo-router/react-navigation';
 import { useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { CollapsibleSection, Field, Half, NumericField, Row, Segmented } from '@/components/Form';
 import { Rifle } from '@/db/schema';
+import { parseDecimal } from '@/lib/parse';
 import { colors, radii, spacing, type } from '@/theme';
 
 // Only "name" is required — everything else is progressive disclosure.
@@ -25,19 +28,18 @@ export type RifleFormValues = {
   notes: string | null;
 };
 
-const num = (s: string): number | null => {
-  const v = parseFloat(s);
-  return Number.isFinite(v) ? v : null;
-};
 const str = (s: string): string | null => (s.trim() === '' ? null : s.trim());
+
+type Errors = Partial<Record<'name' | 'barrelLength' | 'sightHeight' | 'zeroDistance', string>>;
 
 type Props = {
   initial?: Rifle;
   submitLabel: string;
-  onSubmit: (values: RifleFormValues) => void;
+  onSubmit: (values: RifleFormValues) => void | Promise<void>;
 };
 
 export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
+  const navigation = useNavigation();
   const [name, setName] = useState(initial?.name ?? '');
   const [make, setMake] = useState(initial?.make ?? '');
   const [model, setModel] = useState(initial?.model ?? '');
@@ -52,6 +54,36 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
   const [zeroDistance, setZeroDistance] = useState(initial?.zeroDistance?.toString() ?? '100');
   const [photoUri, setPhotoUri] = useState<string | null>(initial?.photoUri ?? null);
   const [notes, setNotes] = useState(initial?.notes ?? '');
+  const [errors, setErrors] = useState<Errors>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  const dirty =
+    name !== (initial?.name ?? '') ||
+    make !== (initial?.make ?? '') ||
+    model !== (initial?.model ?? '') ||
+    cartridge !== (initial?.cartridge ?? '') ||
+    barrelLength !== (initial?.barrelLengthIn?.toString() ?? '') ||
+    twistRate !== (initial?.twistRate ?? '') ||
+    scopeMake !== (initial?.scopeMake ?? '') ||
+    scopeModel !== (initial?.scopeModel ?? '') ||
+    sightHeight !== (initial?.sightHeightIn?.toString() ?? '1.9') ||
+    turretUnit !== (initial?.turretUnit ?? 'MIL') ||
+    distanceUnit !== (initial?.distanceUnit ?? 'yd') ||
+    zeroDistance !== (initial?.zeroDistance?.toString() ?? '100') ||
+    photoUri !== (initial?.photoUri ?? null) ||
+    notes !== (initial?.notes ?? '');
+
+  // While submitting the guard is down so the post-save navigation goes through;
+  // a failed save re-arms it (submitting resets to false).
+  usePreventRemove(dirty && !submitting, ({ data }) => {
+    Alert.alert('Discard changes?', 'You have unsaved edits on this rifle.', [
+      { text: 'Keep Editing', style: 'cancel' },
+      { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
+    ]);
+  });
+
+  const clearError = (key: keyof Errors) =>
+    setErrors((e) => (e[key] ? { ...e, [key]: undefined } : e));
 
   const pickPhoto = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -61,27 +93,45 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
     if (!result.canceled && result.assets[0]) setPhotoUri(result.assets[0].uri);
   };
 
-  const submit = () => {
-    if (name.trim() === '') {
-      Alert.alert('Name required', 'Give this rifle a name — everything else is optional.');
+  const submit = async () => {
+    const errs: Errors = {};
+    // Non-empty but unparseable numbers block submit; empty falls back to defaults.
+    const num = (value: string, key: keyof Errors): number | null => {
+      if (value.trim() === '') return null;
+      const n = parseDecimal(value);
+      if (n === null) errs[key] = 'Enter a number like 41.5';
+      return n;
+    };
+    if (name.trim() === '') errs.name = 'Name is required — everything else is optional.';
+    const barrelLengthIn = num(barrelLength, 'barrelLength');
+    const sightHeightIn = num(sightHeight, 'sightHeight');
+    const zeroDist = num(zeroDistance, 'zeroDistance');
+    if (Object.values(errs).some(Boolean)) {
+      setErrors(errs);
       return;
     }
-    onSubmit({
-      name: name.trim(),
-      make: str(make),
-      model: str(model),
-      cartridge: str(cartridge),
-      barrelLengthIn: num(barrelLength),
-      twistRate: str(twistRate),
-      scopeMake: str(scopeMake),
-      scopeModel: str(scopeModel),
-      sightHeightIn: num(sightHeight) ?? 1.9,
-      turretUnit,
-      distanceUnit,
-      zeroDistance: num(zeroDistance) ?? 100,
-      photoUri,
-      notes: str(notes),
-    });
+    setErrors({});
+    setSubmitting(true);
+    try {
+      await onSubmit({
+        name: name.trim(),
+        make: str(make),
+        model: str(model),
+        cartridge: str(cartridge),
+        barrelLengthIn,
+        twistRate: str(twistRate),
+        scopeMake: str(scopeMake),
+        scopeModel: str(scopeModel),
+        sightHeightIn: sightHeightIn ?? 1.9,
+        turretUnit,
+        distanceUnit,
+        zeroDistance: zeroDist ?? 100,
+        photoUri,
+        notes: str(notes),
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -89,9 +139,13 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
       <Field
         label="Name *"
         value={name}
-        onChangeText={setName}
+        onChangeText={(v) => {
+          setName(v);
+          clearError('name');
+        }}
         placeholder={'e.g. "6.5 CM Match"'}
         autoFocus={!initial}
+        error={errors.name}
       />
 
       <Row>
@@ -99,7 +153,16 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
           <Field label="Cartridge" value={cartridge} onChangeText={setCartridge} placeholder="6.5 Creedmoor" />
         </Half>
         <Half>
-          <NumericField label="Zero distance" value={zeroDistance} onChangeText={setZeroDistance} suffix={distanceUnit} />
+          <NumericField
+            label="Zero distance"
+            value={zeroDistance}
+            onChangeText={(v) => {
+              setZeroDistance(v);
+              clearError('zeroDistance');
+            }}
+            suffix={distanceUnit}
+            error={errors.zeroDistance}
+          />
         </Half>
       </Row>
 
@@ -123,7 +186,16 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
         </Row>
         <Row>
           <Half>
-            <NumericField label="Barrel length" value={barrelLength} onChangeText={setBarrelLength} suffix="in" />
+            <NumericField
+              label="Barrel length"
+              value={barrelLength}
+              onChangeText={(v) => {
+                setBarrelLength(v);
+                clearError('barrelLength');
+              }}
+              suffix="in"
+              error={errors.barrelLength}
+            />
           </Half>
           <Half>
             <Field label="Twist rate" value={twistRate} onChangeText={setTwistRate} placeholder="1:8" />
@@ -140,7 +212,16 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
             <Field label="Scope model" value={scopeModel} onChangeText={setScopeModel} placeholder="Razor LHT" />
           </Half>
         </Row>
-        <NumericField label="Sight height over bore" value={sightHeight} onChangeText={setSightHeight} suffix="in" />
+        <NumericField
+          label="Sight height over bore"
+          value={sightHeight}
+          onChangeText={(v) => {
+            setSightHeight(v);
+            clearError('sightHeight');
+          }}
+          suffix="in"
+          error={errors.sightHeight}
+        />
       </CollapsibleSection>
 
       <CollapsibleSection title="Photo & notes">
@@ -154,7 +235,7 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
         <Field label="Notes" value={notes} onChangeText={setNotes} multiline placeholder="Trigger weight, bedding, torque specs…" />
       </CollapsibleSection>
 
-      <Button label={submitLabel} onPress={submit} style={{ marginTop: spacing.md }} />
+      <Button label={submitLabel} onPress={submit} loading={submitting} style={{ marginTop: spacing.md }} />
     </View>
   );
 }
