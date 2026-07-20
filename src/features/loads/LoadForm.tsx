@@ -103,6 +103,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
     if (name.trim() === '') errs.name = 'Name is required — everything else is optional.';
     const bulletWeightGr = num(bulletWeight, 'bulletWeight');
     const bc = num(bcValue, 'bcValue');
+    if (bc !== null && bc <= 0 && !errs.bcValue) errs.bcValue = 'BC must be greater than 0.';
     const charge = num(chargeGr, 'chargeGr');
     const firings = num(brassFirings, 'brassFirings');
     const cbtoIn = num(cbto, 'cbto');

@@ -50,13 +50,13 @@ export const type = {
     textTransform: 'uppercase' as const,
     letterSpacing: 0.8,
   },
-  mono: { fontVariant: ['tabular-nums' as const] },
+  mono: { fontVariant: tabularNums },
   caption: { fontSize: 12, color: colors.textSecondary },
   statValue: {
     fontSize: 22,
     fontWeight: '700' as const,
     color: colors.text,
-    fontVariant: ['tabular-nums' as const],
+    fontVariant: tabularNums,
   },
 } as const;
 

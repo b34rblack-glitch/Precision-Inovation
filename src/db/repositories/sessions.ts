@@ -98,7 +98,47 @@ export async function confirmedDopeForRifleLoad(
         isNull(rangeSessions.archivedAt),
       ),
     );
+  // r.dope carries dopeEntries.createdAt, the fine tie-break used when several
+  // confirmations share a session date (all DOPE in one session does).
   return rows.map((r) => ({ ...r.dope, sessionDate: r.session.date }));
+}
+
+/**
+ * Atmosphere from the most recent logged session for this load's version
+ * lineage — used to seed the range-card solver at build time instead of the
+ * ICAO sea-level default. Returns the newest (by date) non-archived session
+ * that recorded at least one of temperature / pressure / altitude, or null.
+ */
+export async function latestSessionAtmo(loadVersionId: string): Promise<{
+  tempF: number | null;
+  pressureInHg: number | null;
+  altitudeFt: number | null;
+  humidityPct: number | null;
+} | null> {
+  const versionIds = await lineageVersionIds(loadVersionId);
+  const rows = await db
+    .select({
+      tempF: rangeSessions.tempF,
+      pressureInHg: rangeSessions.pressureInHg,
+      altitudeFt: rangeSessions.altitudeFt,
+      humidityPct: rangeSessions.humidityPct,
+    })
+    .from(rangeSessions)
+    .where(
+      and(inArray(rangeSessions.loadVersionId, versionIds), isNull(rangeSessions.archivedAt)),
+    )
+    .orderBy(desc(rangeSessions.date));
+  for (const r of rows) {
+    if (r.tempF != null || r.pressureInHg != null || r.altitudeFt != null) {
+      return {
+        tempF: r.tempF,
+        pressureInHg: r.pressureInHg,
+        altitudeFt: r.altitudeFt,
+        humidityPct: r.humidityPct,
+      };
+    }
+  }
+  return null;
 }
 
 export async function createSession(

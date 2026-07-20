@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Card } from '@/components/Card';
+import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
 import { archiveRifle, rifleByIdQuery } from '@/db/repositories/rifles';
 import { loadsForRifleQuery } from '@/db/repositories/loads';
@@ -23,11 +24,25 @@ function SpecRow({ label, value }: { label: string; value: string | null }) {
 export default function RifleDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { data } = useLiveQuery(rifleByIdQuery(id), [id]);
+  const { data, updatedAt } = useLiveQuery(rifleByIdQuery(id), [id]);
   const { data: rifleLoads } = useLiveQuery(loadsForRifleQuery(id), [id]);
   const { data: sessions } = useLiveQuery(recentSessionsForRifleQuery(id, 5), [id]);
   const rifle = data[0];
-  if (!rifle) return <Screen underHeader>{null}</Screen>;
+  if (!rifle) {
+    // updatedAt is undefined until the live query's first emission — stay blank
+    // while loading; only after it emits with no row is this truly not found.
+    if (updatedAt === undefined) return <Screen underHeader>{null}</Screen>;
+    return (
+      <Screen underHeader>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Rifle not found"
+          message="This rifle may have been archived or deleted."
+          action={{ label: 'Back to Rifles', onPress: () => router.replace('/rifles') }}
+        />
+      </Screen>
+    );
+  }
 
   const confirmArchive = () => {
     Alert.alert('Archive rifle?', `"${rifle.name}" will be hidden but its history is kept.`, [
@@ -100,12 +115,9 @@ export default function RifleDetailScreen() {
 
       <Text style={[type.label, { marginBottom: spacing.sm }]}>Loads for this rifle</Text>
       {rifleLoads.length === 0 ? (
-        <Button
-          label="New Load for this Rifle"
-          variant="secondary"
-          onPress={() => router.push(`/loads/new?rifleId=${rifle.id}`)}
-          style={{ marginBottom: spacing.lg }}
-        />
+        <Text style={[type.secondary, { marginBottom: spacing.md }]}>
+          No loads assigned to this rifle yet.
+        </Text>
       ) : (
         rifleLoads.map((load) => (
           <Card key={load.id} onPress={() => router.push(`/loads/${load.id}`)}>
@@ -114,6 +126,12 @@ export default function RifleDetailScreen() {
           </Card>
         ))
       )}
+      <Button
+        label="New Load for this Rifle"
+        variant="secondary"
+        onPress={() => router.push(`/loads/new?rifleId=${rifle.id}`)}
+        style={{ marginBottom: spacing.lg }}
+      />
 
       <Text style={[type.label, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>
         Recent sessions
@@ -129,7 +147,12 @@ export default function RifleDetailScreen() {
         ))
       )}
 
-      <Pressable onPress={confirmArchive} style={styles.archiveBtn}>
+      <Pressable
+        onPress={confirmArchive}
+        style={styles.archiveBtn}
+        accessibilityRole="button"
+        accessibilityLabel="Archive rifle"
+      >
         <Text style={{ color: colors.danger, fontSize: 15, fontWeight: '600' }}>Archive rifle</Text>
       </Pressable>
     </Screen>
