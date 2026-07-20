@@ -24,6 +24,18 @@ export default function NewSessionScreen() {
   const [rifleId, setRifleId] = useState<string | null>(params.rifleId ?? lastUsed.rifleId);
   const [loadId, setLoadId] = useState<string | null>(params.loadId ?? lastUsed.loadId);
   const [location, setLocation] = useState(lastUsed.location ?? '');
+  const [touched, setTouched] = useState(false);
+
+  // AsyncStorage rehydration is async: on a cold start the initial snapshot
+  // above sees nulls. Adopt the remembered bench context when it arrives, as
+  // long as no deep link provided values and the user hasn't picked anything.
+  useEffect(() => {
+    if (touched || params.rifleId || params.loadId) return;
+    if (rifleId === null && lastUsed.rifleId) setRifleId(lastUsed.rifleId);
+    if (loadId === null && lastUsed.loadId) setLoadId(lastUsed.loadId);
+    setLocation((cur) => (cur === '' && lastUsed.location ? lastUsed.location : cur));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastUsed.rifleId, lastUsed.loadId, lastUsed.location]);
   const [tempF, setTempF] = useState('');
   const [pressureInHg, setPressureInHg] = useState('');
   const [altitudeFt, setAltitudeFt] = useState('');
@@ -51,6 +63,7 @@ export default function NewSessionScreen() {
   }, [loadsLoadedAt, rifleLoads, loadId]);
 
   const selectRifle = (id: string) => {
+    setTouched(true);
     setRifleId(id);
     // Keep the load only if it's valid for the newly selected rifle.
     const nextLoads = loads.filter((l) => l.rifleId === id || l.rifleId === null);
@@ -90,7 +103,7 @@ export default function NewSessionScreen() {
   return (
     <Screen underHeader>
       <Text style={[type.label, { marginBottom: spacing.xs }]}>Rifle *</Text>
-      {rifles.length === 0 ? (
+      {riflesLoadedAt && rifles.length === 0 ? (
         <>
           <Text style={[type.secondary, { marginBottom: spacing.md }]}>
             A session needs a rifle to log DOPE against.
@@ -112,13 +125,23 @@ export default function NewSessionScreen() {
 
       <Text style={[type.label, { marginBottom: spacing.xs, marginTop: spacing.md }]}>Load</Text>
       <View style={styles.chipWrap}>
-        <Chip label="None" selected={loadId === null} onPress={() => setLoadId(null)} />
+        <Chip
+          label="None"
+          selected={loadId === null}
+          onPress={() => {
+            setTouched(true);
+            setLoadId(null);
+          }}
+        />
         {rifleLoads.map((l) => (
           <Chip
             key={l.id}
             label={l.name}
             selected={loadId === l.id}
-            onPress={() => setLoadId(l.id)}
+            onPress={() => {
+              setTouched(true);
+              setLoadId(l.id);
+            }}
           />
         ))}
       </View>

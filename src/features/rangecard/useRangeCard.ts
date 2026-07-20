@@ -42,9 +42,19 @@ export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | n
 
   useEffect(() => {
     let cancelled = false;
+    // Reset to a clean loading state whenever inputs change so a stale card
+    // from the previous load can't receive preset/true-up writes during the
+    // refetch window.
+    setState((s) => ({
+      ...s,
+      status: 'loading',
+      errorMessage: null,
+      card: null,
+      rows: [],
+      confirmedCount: 0,
+    }));
     (async () => {
       if (!rifle || !loadVersionId) {
-        setState((s) => ({ ...s, status: 'loading', errorMessage: null }));
         return;
       }
       const [card, version, observedRaw] = await Promise.all([

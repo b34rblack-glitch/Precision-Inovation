@@ -142,7 +142,11 @@ export default function RangeCardScreen() {
               {(['bench', 'hunting'] as const).map((p) => (
                 <Pressable
                   key={p}
-                  onPress={() => cardState.changePreset(p)}
+                  onPress={() =>
+                    cardState.changePreset(p).catch((e: unknown) =>
+                      Alert.alert('Could not switch preset', e instanceof Error ? e.message : String(e)),
+                    )
+                  }
                   accessibilityRole="button"
                   accessibilityState={{ selected: card?.preset === p }}
                   style={[styles.presetBtn, card?.preset === p && styles.presetBtnActive]}

@@ -13,7 +13,7 @@ import { colors, spacing, type } from '@/theme';
 
 export default function RangeScreen() {
   const router = useRouter();
-  const { data: sessions } = useLiveQuery(activeSessionsQuery());
+  const { data: sessions, updatedAt: sessionsLoadedAt } = useLiveQuery(activeSessionsQuery());
   const { data: rifles } = useLiveQuery(activeRiflesQuery());
   const { data: loads } = useLiveQuery(activeLoadsQuery());
   const rifleName = (id: string) => rifles.find((r) => r.id === id)?.name ?? 'Rifle';
@@ -68,7 +68,7 @@ export default function RangeScreen() {
           </>
         ) : null}
 
-        {sessions.length === 0 ? (
+        {sessionsLoadedAt && sessions.length === 0 ? (
           <EmptyState
             icon="analytics"
             title="No sessions yet"

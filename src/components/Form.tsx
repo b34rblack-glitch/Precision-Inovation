@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { forwardRef, ReactNode, useImperativeHandle, useRef, useState } from 'react';
+import { forwardRef, ReactNode, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import {
   KeyboardTypeOptions,
   LayoutAnimation,
@@ -171,6 +171,9 @@ export function Stepper({ label, value, step, onChange, decimals = 1, suffix, mi
 
   const nudge = (dir: 1 | -1) => {
     Haptics.selectionAsync();
+    // A +/- tap supersedes any in-progress typing; valueRef already holds the
+    // latest committed value (typing commits as-you-type below).
+    setDraft(null);
     onChange(round(Math.max(min, valueRef.current + dir * step)));
   };
   const startRepeat = (dir: 1 | -1) => {
@@ -183,12 +186,16 @@ export function Stepper({ label, value, step, onChange, decimals = 1, suffix, mi
       repeatRef.current = null;
     }
   };
-  const commitDraft = () => {
-    if (draft !== null) {
-      const parsed = parseDecimal(draft);
-      if (parsed !== null) onChange(round(Math.max(min, parsed)));
-      setDraft(null);
-    }
+  // Kill a live long-press repeat if the screen unmounts mid-press.
+  useEffect(() => stopRepeat, []);
+  // Commit as-you-type: with keyboardShouldPersistTaps="handled", tapping a
+  // submit button does NOT blur this input, so a blur-only commit would let
+  // the form submit with a stale value. Committing every valid keystroke
+  // means there is never an uncommitted draft to lose.
+  const onDraftChange = (text: string) => {
+    setDraft(text);
+    const parsed = parseDecimal(text);
+    if (parsed !== null) onChange(round(Math.max(min, parsed)));
   };
 
   return (
@@ -222,8 +229,8 @@ export function Stepper({ label, value, step, onChange, decimals = 1, suffix, mi
             style={styles.stepperValue}
             value={draft ?? value.toFixed(decimals)}
             onFocus={() => setDraft(value.toFixed(decimals))}
-            onChangeText={setDraft}
-            onBlur={commitDraft}
+            onChangeText={onDraftChange}
+            onBlur={() => setDraft(null)}
             keyboardType="decimal-pad"
             selectTextOnFocus
             accessibilityLabel={label}
