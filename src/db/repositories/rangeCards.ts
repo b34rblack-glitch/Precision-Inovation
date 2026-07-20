@@ -50,8 +50,15 @@ export async function getOrCreateCard(
     createdAt: t,
     updatedAt: t,
   };
-  await db.insert(rangeCards).values(row);
-  return row as RangeCard;
+  // A unique index on (rifle_id, load_version_id) backs this: concurrent
+  // callers can both miss the select above, but only one insert wins; the
+  // loser no-ops and the re-select below returns the winner's row.
+  await db.insert(rangeCards).values(row).onConflictDoNothing();
+  const [card] = await db
+    .select()
+    .from(rangeCards)
+    .where(and(eq(rangeCards.rifleId, rifleId), eq(rangeCards.loadVersionId, loadVersionId)));
+  return card ?? (row as RangeCard);
 }
 
 export async function setCardPreset(

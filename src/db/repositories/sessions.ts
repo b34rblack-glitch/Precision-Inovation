@@ -51,11 +51,41 @@ export function stringsForSessionQuery(sessionId: string) {
     .orderBy(asc(shotStrings.createdAt));
 }
 
-/** All confirmed DOPE for a rifle + load version — feeds the range card merge. */
+/**
+ * All load-version ids in the same lineage as the given version.
+ *
+ * Loads are copy-on-write: every edit creates a new loadVersion linked to its
+ * predecessor via parentVersionId, so sessions/DOPE recorded against an older
+ * version would be orphaned if we filtered by the exact version id. Since
+ * every version of a load descends from that load's v1, all versions with the
+ * same loadId form one parent-link chain — so "all versions of the loadId" is
+ * exactly the lineage (ancestors + descendants) and far simpler than walking
+ * parentVersionId in both directions. Falls back to just the given id if the
+ * version row is missing.
+ */
+async function lineageVersionIds(loadVersionId: string): Promise<string[]> {
+  const [version] = await db
+    .select({ loadId: loadVersions.loadId })
+    .from(loadVersions)
+    .where(eq(loadVersions.id, loadVersionId));
+  if (!version) return [loadVersionId];
+  const siblings = await db
+    .select({ id: loadVersions.id })
+    .from(loadVersions)
+    .where(eq(loadVersions.loadId, version.loadId));
+  return siblings.map((s) => s.id);
+}
+
+/**
+ * All confirmed DOPE for a rifle + load version — feeds the range card merge.
+ * Aggregates across the whole version lineage (see lineageVersionIds) so a
+ * load edit doesn't make previously confirmed DOPE vanish from the card.
+ */
 export async function confirmedDopeForRifleLoad(
   rifleId: string,
   loadVersionId: string,
 ): Promise<(DopeEntry & { sessionDate: Date })[]> {
+  const versionIds = await lineageVersionIds(loadVersionId);
   const rows = await db
     .select({ dope: dopeEntries, session: rangeSessions })
     .from(dopeEntries)
@@ -63,7 +93,7 @@ export async function confirmedDopeForRifleLoad(
     .where(
       and(
         eq(rangeSessions.rifleId, rifleId),
-        eq(rangeSessions.loadVersionId, loadVersionId),
+        inArray(rangeSessions.loadVersionId, versionIds),
         eq(dopeEntries.confirmed, true),
         isNull(rangeSessions.archivedAt),
       ),
@@ -166,12 +196,17 @@ export async function deleteShotString(id: string): Promise<void> {
   await db.delete(shotStrings).where(eq(shotStrings.id, id));
 }
 
-/** Latest measured average MV (fps) for a load version, newest string first. */
+/**
+ * Latest measured average MV (fps) for a load version, newest string first.
+ * Searches the whole version lineage (see lineageVersionIds) so chrono data
+ * logged before a load edit still seeds the range card.
+ */
 export async function latestMeasuredMv(loadVersionId: string): Promise<number | null> {
+  const versionIds = await lineageVersionIds(loadVersionId);
   const sessions = await db
     .select({ id: rangeSessions.id })
     .from(rangeSessions)
-    .where(eq(rangeSessions.loadVersionId, loadVersionId));
+    .where(inArray(rangeSessions.loadVersionId, versionIds));
   if (sessions.length === 0) return null;
   const strings = await db
     .select()
