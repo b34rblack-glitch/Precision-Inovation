@@ -43,21 +43,29 @@ requires it to sign any app that runs on a physical iPhone. No Mac needed.
 ### Build it (from a Windows or Linux PC)
 ```
 npm install -g eas-cli
-eas login                              # your Expo account
-eas build --platform ios --profile preview
+eas login                                  # your Expo account
+eas build --platform ios --profile production
 ```
 When prompted, log in with your **Apple ID** — EAS creates and manages all the
 signing certificates and provisioning for you. The build runs in Expo's cloud
-(~15–25 min) and finishes with a download/QR link.
+(~15–25 min).
 
-### Install on the iPhone
-- Easiest: submit the build to **TestFlight** and install via the TestFlight app:
-  ```
-  eas submit --platform ios --latest
-  ```
-  Then open TestFlight on the iPhone and install.
-- Or use the **ad-hoc** link EAS gives you (register the iPhone's UDID first when
-  EAS asks).
+### Send it to a friend's iPhone via TestFlight (no UDID, no physical access)
+```
+eas submit --platform ios --latest
+```
+This uploads the build to **App Store Connect**. Then:
+1. Go to <https://appstoreconnect.apple.com> → your app → **TestFlight**.
+2. Add your friend as a tester by their **Apple ID email** (External Testing group).
+   External builds need a one-time Apple "beta review" — usually approved within a
+   day. (To skip review, add them under **Users and Access** as an internal tester.)
+3. Your friend installs **TestFlight** from the App Store, opens the emailed invite,
+   and installs the app. Builds last 90 days; re-submit to renew.
+
+### Alternative: ad-hoc (needs the friend's device UDID)
+Faster if you can get their UDID, no Apple review: build with
+`--profile preview` instead, register the UDID when EAS prompts, and send them the
+install link EAS produces.
 
 ### Later updates
 Re-run `eas build --platform ios --profile preview` (bump `version` in `app.json`
