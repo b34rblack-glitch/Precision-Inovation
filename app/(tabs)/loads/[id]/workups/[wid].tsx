@@ -7,7 +7,10 @@ import Svg, { Circle, Line, Polyline, Text as SvgText } from 'react-native-svg';
 import { Button } from '@/components/Buttons';
 import { Card } from '@/components/Card';
 import { Chip } from '@/components/Chip';
+import { Half, NumericField, Row } from '@/components/Form';
+import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
+import { rifleByIdQuery } from '@/db/repositories/rifles';
 import { addShotString, deleteShotString } from '@/db/repositories/sessions';
 import {
   archiveWorkup,
@@ -20,8 +23,9 @@ import {
 } from '@/db/repositories/workups';
 import { WorkupStep } from '@/db/schema';
 import { parseDecimal, parseVelocityList } from '@/lib/parse';
+import { ydToDistance } from '@/lib/units';
 import { ChargePoint, findFlatSpots } from '@/lib/workup/stats';
-import { colors, radii, spacing, type } from '@/theme';
+import { colors, radii, spacing, touchTarget, type } from '@/theme';
 
 const TITLES: Record<string, string> = {
   ladder: 'Ladder Test',
@@ -38,14 +42,18 @@ function StepCard({
   showGroup,
   summary,
   onSaveVelocities,
-  onSaveGroup,
+  onSaveResult,
   onClearString,
 }: {
   step: WorkupStep;
   showGroup: boolean;
   summary: { avgFps: number | null; sdFps: number | null; esFps: number | null; shotCount: number | null } | null;
   onSaveVelocities: (velocities: number[]) => Promise<void>;
-  onSaveGroup: (groupSizeIn: number | null) => Promise<void>;
+  onSaveResult: (result: {
+    groupSizeIn: number | null;
+    poiXIn: number | null;
+    poiYIn: number | null;
+  }) => Promise<void>;
   onClearString: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
@@ -53,6 +61,10 @@ function StepCard({
   const [velError, setVelError] = useState<string | undefined>();
   const [groupText, setGroupText] = useState(step.groupSizeIn?.toString() ?? '');
   const [groupError, setGroupError] = useState<string | undefined>();
+  // POI up (Y) / right (X) in inches; signed values allowed.
+  const [poiYText, setPoiYText] = useState(step.poiYIn?.toString() ?? '');
+  const [poiXText, setPoiXText] = useState(step.poiXIn?.toString() ?? '');
+  const [poiError, setPoiError] = useState<string | undefined>();
   const [saving, setSaving] = useState(false);
 
   const parsedVelocities = useMemo(
@@ -71,10 +83,19 @@ function StepCard({
       setGroupError('Enter a number like 0.75');
       return;
     }
+    const poiY = parseDecimal(poiYText);
+    const poiX = parseDecimal(poiXText);
+    if (
+      showGroup &&
+      ((poiYText.trim() !== '' && poiY === null) || (poiXText.trim() !== '' && poiX === null))
+    ) {
+      setPoiError('Enter a number like 0.3 or -0.5');
+      return;
+    }
     setSaving(true);
     try {
       if (parsedVelocities.length > 0) await onSaveVelocities(parsedVelocities);
-      if (showGroup) await onSaveGroup(groupSize);
+      if (showGroup) await onSaveResult({ groupSizeIn: groupSize, poiXIn: poiX, poiYIn: poiY });
       setVelText('');
       setOpen(false);
     } catch (e) {
@@ -84,18 +105,31 @@ function StepCard({
     }
   };
 
-  const clear = async () => {
-    setSaving(true);
-    try {
-      await onClearString();
-    } catch (e) {
-      saveFailed(e);
-    } finally {
-      setSaving(false);
-    }
+  const clear = () => {
+    Alert.alert("Clear this charge's data?", 'The saved chronograph string will be removed.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear',
+        style: 'destructive',
+        onPress: async () => {
+          setSaving(true);
+          try {
+            await onClearString();
+          } catch (e) {
+            saveFailed(e);
+          } finally {
+            setSaving(false);
+          }
+        },
+      },
+    ]);
   };
 
-  const hasData = summary?.avgFps != null || step.groupSizeIn != null;
+  const hasData =
+    summary?.avgFps != null ||
+    step.groupSizeIn != null ||
+    step.poiXIn != null ||
+    step.poiYIn != null;
   const chargeLabel = `${step.chargeGr.toFixed(2).replace(/0$/, '')} gr`;
 
   return (
@@ -126,6 +160,11 @@ function StepCard({
           {showGroup && step.groupSizeIn != null ? (
             <Text style={type.secondary}>{step.groupSizeIn}" group</Text>
           ) : null}
+          {showGroup && (step.poiXIn != null || step.poiYIn != null) ? (
+            <Text style={type.secondary}>
+              {`POI ${step.poiYIn ?? 0}" up, ${step.poiXIn ?? 0}" right`}
+            </Text>
+          ) : null}
         </View>
         <Ionicons
           name={hasData ? 'checkmark-circle' : open ? 'chevron-up' : 'chevron-down'}
@@ -147,6 +186,7 @@ function StepCard({
             placeholder="2701 2698 2711"
             placeholderTextColor={colors.textTertiary}
             keyboardType={Platform.select({ ios: 'numbers-and-punctuation', default: 'default' })}
+            accessibilityLabel="Velocities in feet per second"
             multiline
           />
           {velError ? (
@@ -169,8 +209,39 @@ function StepCard({
                 keyboardType="decimal-pad"
                 placeholder="0.75"
                 placeholderTextColor={colors.textTertiary}
+                accessibilityLabel="Group size in inches"
               />
               {groupError ? <Text style={styles.errorText}>{groupError}</Text> : null}
+              <Text style={[type.label, { marginTop: spacing.md }]}>Point of impact (in)</Text>
+              <Row>
+                <Half>
+                  <NumericField
+                    label="Up"
+                    value={poiYText}
+                    onChangeText={(v) => {
+                      setPoiYText(v);
+                      setPoiError(undefined);
+                    }}
+                    placeholder="0.0"
+                    suffix="in"
+                    signed
+                    error={poiError}
+                  />
+                </Half>
+                <Half>
+                  <NumericField
+                    label="Right"
+                    value={poiXText}
+                    onChangeText={(v) => {
+                      setPoiXText(v);
+                      setPoiError(undefined);
+                    }}
+                    placeholder="0.0"
+                    suffix="in"
+                    signed
+                  />
+                </Half>
+              </Row>
             </>
           ) : null}
           <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.md }}>
@@ -251,10 +322,13 @@ function VelocityChart({
 export default function WorkupDetailScreen() {
   const { id: loadId, wid } = useLocalSearchParams<{ id: string; wid: string }>();
   const router = useRouter();
-  const { data: workupRows } = useLiveQuery(workupByIdQuery(wid), [wid]);
+  const { data: workupRows, updatedAt } = useLiveQuery(workupByIdQuery(wid), [wid]);
   const { data: steps } = useLiveQuery(stepsForWorkupQuery(wid), [wid]);
   const { data: stepStrings } = useLiveQuery(stringsForStepsQuery(wid), [wid]);
   const workup = workupRows[0];
+  // The test distance is stored canonical (yd); display it in the rifle's unit.
+  const { data: rifleRows } = useLiveQuery(rifleByIdQuery(workup?.rifleId ?? ''), [workup?.rifleId]);
+  const distanceUnit = rifleRows[0]?.distanceUnit ?? 'yd';
   const [promoting, setPromoting] = useState(false);
   const [completing, setCompleting] = useState(false);
 
@@ -288,7 +362,21 @@ export default function WorkupDetailScreen() {
     [chargePoints],
   );
 
-  if (!workup) return <Screen underHeader>{null}</Screen>;
+  if (!workup) {
+    // updatedAt is undefined until the live query's first emission — stay blank
+    // while loading; only after it emits with no row is this truly not found.
+    if (updatedAt === undefined) return <Screen underHeader>{null}</Screen>;
+    return (
+      <Screen underHeader>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Workup not found"
+          message="This workup may have been archived or deleted."
+          action={{ label: 'Back to Load', onPress: () => router.replace(`/loads/${loadId}`) }}
+        />
+      </Screen>
+    );
+  }
   const showGroup = workup.type === 'ocw' || workup.type === 'ladder';
 
   const promote = (chargeGr: number) => {
@@ -362,7 +450,10 @@ export default function WorkupDetailScreen() {
       <Card>
         <Text style={type.secondary}>
           {workup.stepCount} charges · {workup.shotsPerCharge}{' '}
-          {workup.shotsPerCharge === 1 ? 'shot' : 'shots'} each · {workup.distanceYd ?? '—'} yd
+          {workup.shotsPerCharge === 1 ? 'shot' : 'shots'} each ·{' '}
+          {workup.distanceYd != null
+            ? `${Math.round(ydToDistance(workup.distanceYd, distanceUnit))} ${distanceUnit}`
+            : '—'}
         </Text>
         <Text style={[type.secondary, { marginTop: 2, color: colors.textTertiary }]}>
           Enter chrono velocities per charge{showGroup ? ' and group size' : ''}. Flat spots light
@@ -429,7 +520,7 @@ export default function WorkupDetailScreen() {
               await addShotString({ workupStepId: step.id, velocitiesFps: velocities });
               if (workup.status === 'planned') await updateWorkupStatus(workup.id, 'in_progress');
             }}
-            onSaveGroup={(g) => updateStepResult(step.id, { groupSizeIn: g })}
+            onSaveResult={(result) => updateStepResult(step.id, result)}
             onClearString={async () => {
               const existing = summaries.get(step.id);
               if (existing) await deleteShotString(existing.id);
@@ -472,7 +563,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    minHeight: 44,
+    minHeight: touchTarget,
   },
   errorText: { ...type.caption, color: colors.danger, marginTop: spacing.xs },
   previewText: { ...type.caption, color: colors.textSecondary, marginTop: spacing.xs },

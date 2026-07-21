@@ -163,8 +163,9 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     fontVariant: ['tabular-nums'],
   },
-  holdPred: { color: '#C9A227' },
+  holdPred: { color: colors.predicted, opacity: 0.6 },
   marker: { fontSize: 20 },
+  machMark: { fontSize: 16, color: '#B38600' },
   wind: {
     minWidth: 92,
     flexShrink: 0,

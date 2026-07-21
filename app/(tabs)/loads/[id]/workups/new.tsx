@@ -59,6 +59,10 @@ export default function NewWorkupScreen() {
 
   if (!load) return <Screen underHeader>{null}</Screen>;
   const effectiveRifleId = rifleId ?? load.rifleId ?? rifles[0]?.id ?? null;
+  // Test distance is entered in the chosen rifle's display unit, then stored in
+  // canonical yards.
+  const effectiveRifle = rifles.find((r) => r.id === effectiveRifleId);
+  const distanceUnit = effectiveRifle?.distanceUnit ?? 'yd';
   const currentVersion = versions.find((v) => v.id === load.currentVersionId);
   const effectiveStartCharge = startCharge ?? currentVersion?.chargeGr ?? 40;
 
@@ -87,8 +91,8 @@ export default function NewWorkupScreen() {
       );
       return;
     }
-    const distanceYd = parseDecimal(distance);
-    if (distance.trim() !== '' && distanceYd === null) {
+    const parsedDistance = parseDecimal(distance);
+    if (distance.trim() !== '' && parsedDistance === null) {
       setDistanceError('Enter a number like 100');
       return;
     }
@@ -103,7 +107,12 @@ export default function NewWorkupScreen() {
         incrementGr: increment,
         stepCount,
         shotsPerCharge,
-        distanceYd: distanceYd ?? (method === 'ladder' ? 300 : 100),
+        distanceYd:
+          parsedDistance != null
+            ? distanceToYd(parsedDistance, distanceUnit)
+            : method === 'ladder'
+              ? 300
+              : 100,
         notes: null,
       });
       router.replace(`/loads/${load.id}/workups/${workup.id}`);
@@ -117,23 +126,25 @@ export default function NewWorkupScreen() {
   return (
     <Screen underHeader>
       <Text style={[type.label, { marginBottom: spacing.sm }]}>Method</Text>
-      {METHODS.map((m) => (
-        <Pressable
-          key={m.key}
-          onPress={() => {
-            setMethod(m.key);
-            setStepCount(DEFAULT_STEP_COUNT[m.key]);
-          }}
-          accessibilityRole="radio"
-          accessibilityState={{ checked: method === m.key }}
-          style={[styles.method, method === m.key && styles.methodActive]}
-        >
-          <Text style={[type.heading, method === m.key && { color: colors.accent }]}>
-            {m.title}
-          </Text>
-          <Text style={[type.secondary, { marginTop: 2 }]}>{m.blurb}</Text>
-        </Pressable>
-      ))}
+      <View accessibilityRole="radiogroup" accessibilityLabel="Method">
+        {METHODS.map((m) => (
+          <Pressable
+            key={m.key}
+            onPress={() => {
+              setMethod(m.key);
+              setStepCount(DEFAULT_STEP_COUNT[m.key]);
+            }}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: method === m.key }}
+            style={[styles.method, method === m.key && styles.methodActive]}
+          >
+            <Text style={[type.heading, method === m.key && { color: colors.accent }]}>
+              {m.title}
+            </Text>
+            <Text style={[type.secondary, { marginTop: 2 }]}>{m.blurb}</Text>
+          </Pressable>
+        ))}
+      </View>
 
       {rifles.length > 1 ? (
         <>
@@ -189,7 +200,7 @@ export default function NewWorkupScreen() {
                 setDistanceError(undefined);
               }}
               placeholder={method === 'ladder' ? '300' : '100'}
-              suffix="yd"
+              suffix={distanceUnit}
               error={distanceError}
             />
           </Half>
