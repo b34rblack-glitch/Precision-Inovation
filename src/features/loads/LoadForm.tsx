@@ -11,7 +11,7 @@ import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { Load, LoadVersion } from '@/db/schema';
 import { ListPickerModal } from '@/components/ListPickerModal';
 import { bestBc, CatalogBullet } from '@/data/bulletCatalog';
-import { BRASS_OPTIONS, POWDER_OPTIONS } from '@/data/componentCatalog';
+import { BRASS_OPTIONS, POWDER_OPTIONS, PRIMER_OPTIONS } from '@/data/componentCatalog';
 import { parseDecimal } from '@/lib/parse';
 import { BulletCatalogModal } from '@/features/loads/BulletCatalogModal';
 import { colors, spacing, type } from '@/theme';
@@ -64,6 +64,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
   const [submitting, setSubmitting] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [powderPickerOpen, setPowderPickerOpen] = useState(false);
+  const [primerPickerOpen, setPrimerPickerOpen] = useState(false);
   const [brassPickerOpen, setBrassPickerOpen] = useState(false);
 
   const dirty =
@@ -260,6 +261,12 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           </Half>
         </Row>
         <Field label="Primer" value={primer} onChangeText={setPrimer} placeholder="CCI BR-2" />
+        <Button
+          label="Choose Primer"
+          variant="secondary"
+          onPress={() => setPrimerPickerOpen(true)}
+          style={{ marginTop: spacing.sm }}
+        />
       </CollapsibleSection>
 
       <CollapsibleSection title="Brass & seating">
@@ -349,6 +356,14 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         footer="Product names only — enter your own worked-up charge weight. Always start from published load data and watch for pressure."
         onClose={() => setPowderPickerOpen(false)}
         onSelect={setPowderName}
+      />
+      <ListPickerModal
+        visible={primerPickerOpen}
+        title="Primers"
+        options={PRIMER_OPTIONS}
+        placeholder="Search CCI, 210M, magnum…"
+        onClose={() => setPrimerPickerOpen(false)}
+        onSelect={setPrimer}
       />
       <ListPickerModal
         visible={brassPickerOpen}

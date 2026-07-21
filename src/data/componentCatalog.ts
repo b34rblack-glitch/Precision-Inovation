@@ -61,6 +61,7 @@ export const POWDER_OPTIONS: readonly PickerOption[] = [
   { value: 'Accurate MagPro', group: 'Accurate', note: 'slow, magnums' },
   { value: 'Ramshot TAC', group: 'Ramshot', note: 'medium-fast, .223/.308' },
   { value: 'Ramshot Hunter', group: 'Ramshot', note: 'mid-slow' },
+  { value: 'Ramshot LRT', group: 'Ramshot', note: 'slow, magnums/overbore, temp-stable' },
   { value: 'Ramshot Magnum', group: 'Ramshot', note: 'very slow, magnums' },
   // Winchester / Norma
   { value: 'Winchester StaBALL 6.5', group: 'Winchester', note: 'mid-slow, temp-stable' },
@@ -69,6 +70,44 @@ export const POWDER_OPTIONS: readonly PickerOption[] = [
   { value: 'Norma 203-B', group: 'Norma', note: 'medium' },
   { value: 'Norma URP', group: 'Norma', note: 'mid-slow' },
   { value: 'Norma MRP', group: 'Norma', note: 'slow, magnums' },
+];
+
+// Common rifle primers by brand. `note` gives the size/type (Large/Small
+// Rifle, Magnum, Match/Benchrest). Product names only.
+export const PRIMER_OPTIONS: readonly PickerOption[] = [
+  // CCI
+  { value: 'CCI 200', group: 'CCI', note: 'Large Rifle' },
+  { value: 'CCI 250', group: 'CCI', note: 'Large Rifle Magnum' },
+  { value: 'CCI BR-2', group: 'CCI', note: 'Large Rifle Benchrest (match)' },
+  { value: 'CCI 34', group: 'CCI', note: 'Large Rifle mil-spec' },
+  { value: 'CCI 400', group: 'CCI', note: 'Small Rifle' },
+  { value: 'CCI 450', group: 'CCI', note: 'Small Rifle Magnum' },
+  { value: 'CCI BR-4', group: 'CCI', note: 'Small Rifle Benchrest (match)' },
+  { value: 'CCI 41', group: 'CCI', note: 'Small Rifle mil-spec (5.56)' },
+  // Federal
+  { value: 'Federal 210', group: 'Federal', note: 'Large Rifle' },
+  { value: 'Federal 210M', group: 'Federal', note: 'Large Rifle Match (Gold Medal)' },
+  { value: 'Federal 215', group: 'Federal', note: 'Large Rifle Magnum' },
+  { value: 'Federal 215M', group: 'Federal', note: 'Large Rifle Magnum Match' },
+  { value: 'Federal 205', group: 'Federal', note: 'Small Rifle' },
+  { value: 'Federal 205M', group: 'Federal', note: 'Small Rifle Match (Gold Medal)' },
+  { value: 'Federal GM205M AR', group: 'Federal', note: 'Small Rifle Match, AR' },
+  // Winchester
+  { value: 'Winchester WLR', group: 'Winchester', note: 'Large Rifle' },
+  { value: 'Winchester WLRM', group: 'Winchester', note: 'Large Rifle Magnum' },
+  { value: 'Winchester WSR', group: 'Winchester', note: 'Small Rifle' },
+  // Remington
+  { value: 'Remington 9½', group: 'Remington', note: 'Large Rifle' },
+  { value: 'Remington 9½M', group: 'Remington', note: 'Large Rifle Magnum' },
+  { value: 'Remington 7½', group: 'Remington', note: 'Small Rifle Benchrest' },
+  { value: 'Remington 6½', group: 'Remington', note: 'Small Rifle (light)' },
+  // Others
+  { value: 'RWS 5341', group: 'RWS', note: 'Large Rifle' },
+  { value: 'RWS 4033', group: 'RWS', note: 'Small Rifle' },
+  { value: 'Sellier & Bellot LR', group: 'Sellier & Bellot', note: 'Large Rifle' },
+  { value: 'Sellier & Bellot SR', group: 'Sellier & Bellot', note: 'Small Rifle' },
+  { value: 'Wolf/Tula KVB-7', group: 'Wolf/Tula', note: 'Small Rifle' },
+  { value: 'Wolf/Tula KVB-762', group: 'Wolf/Tula', note: 'Large Rifle' },
 ];
 
 // Common cartridge brass by brand. Brand only — cartridge is chosen elsewhere.
