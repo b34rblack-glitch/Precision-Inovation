@@ -79,6 +79,23 @@ export async function setCardPreset(
     .where(eq(rangeCards.id, cardId));
 }
 
+/** Custom distance range for a card. Values are canonical yards; the caller
+ * converts from the rifle's display unit. Sanitizes so end > start and step > 0. */
+export async function setCardDistances(
+  cardId: string,
+  startDistanceYd: number,
+  endDistanceYd: number,
+  incrementYd: number,
+): Promise<void> {
+  const start = Math.max(1, startDistanceYd);
+  const end = Math.max(start + 1, endDistanceYd);
+  const step = Math.max(1, incrementYd);
+  await db
+    .update(rangeCards)
+    .set({ startDistanceYd: start, endDistanceYd: end, incrementYd: step, updatedAt: now() })
+    .where(eq(rangeCards.id, cardId));
+}
+
 export async function setCardMvOverride(cardId: string, mvFps: number | null): Promise<void> {
   await db
     .update(rangeCards)

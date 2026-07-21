@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getOrCreateCard, setCardMvOverride, setCardPreset } from '@/db/repositories/rangeCards';
+import {
+  getOrCreateCard,
+  setCardDistances,
+  setCardMvOverride,
+  setCardPreset,
+} from '@/db/repositories/rangeCards';
 import { getVersionById } from '@/db/repositories/loads';
 import {
   confirmedDopeForRifleLoad,
@@ -56,12 +61,15 @@ export type RangeCardState = {
   confirmedCount: number;
   refresh: () => void;
   changePreset: (p: CardPreset) => Promise<void>;
+  changeDistances: (startYd: number, endYd: number, incrementYd: number) => Promise<void>;
   trueUp: () => Promise<number | null>;
   clearTrueUp: () => Promise<void>;
 };
 
 export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | null): RangeCardState {
-  const [state, setState] = useState<Omit<RangeCardState, 'refresh' | 'changePreset' | 'trueUp' | 'clearTrueUp'>>({
+  const [state, setState] = useState<
+    Omit<RangeCardState, 'refresh' | 'changePreset' | 'changeDistances' | 'trueUp' | 'clearTrueUp'>
+  >({
     status: 'loading',
     errorMessage: null,
     missing: [],
@@ -280,5 +288,15 @@ export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | n
     refresh();
   }, [state.card, refresh]);
 
-  return { ...state, refresh, changePreset, trueUp, clearTrueUp };
+  // Custom start/end/increment (canonical yards). Overrides the preset's grid.
+  const changeDistances = useCallback(
+    async (startYd: number, endYd: number, incrementYd: number) => {
+      if (!state.card) return;
+      await setCardDistances(state.card.id, startYd, endYd, incrementYd);
+      refresh();
+    },
+    [state.card, refresh],
+  );
+
+  return { ...state, refresh, changePreset, changeDistances, trueUp, clearTrueUp };
 }

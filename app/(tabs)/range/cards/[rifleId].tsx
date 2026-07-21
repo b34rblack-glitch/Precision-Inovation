@@ -13,6 +13,7 @@ import { Screen } from '@/components/Screen';
 import { activeLoadsQuery } from '@/db/repositories/loads';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
 import { useRangeCard } from '@/features/rangecard/useRangeCard';
+import { CardDistancesModal } from '@/features/rangecard/CardDistancesModal';
 import { rangeCardHtml } from '@/lib/rangecard/pdfHtml';
 import { formatHold, ydToDistance } from '@/lib/units';
 import { colors, radii, spacing, touchTarget, type } from '@/theme';
@@ -38,6 +39,7 @@ export default function RangeCardScreen() {
   const [sharing, setSharing] = useState(false);
   // Guards preset switches and true-up against double-tap stacking writes/alerts.
   const [busy, setBusy] = useState(false);
+  const [distancesOpen, setDistancesOpen] = useState(false);
 
   if (!rifle) return <Screen scroll={false} underHeader>{null}</Screen>;
 
@@ -181,6 +183,25 @@ export default function RangeCardScreen() {
                 </Pressable>
               ))}
             </View>
+
+            {card ? (
+              <Pressable
+                onPress={() => setDistancesOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Edit card distances"
+                style={({ pressed }) => [styles.distancesRow, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="options-outline" size={18} color={colors.textSecondary} />
+                <Text style={[type.secondary, { flex: 1 }]}>
+                  {Math.round(ydToDistance(card.startDistanceYd, distanceUnit))}–
+                  {Math.round(ydToDistance(card.endDistanceYd, distanceUnit))} {distanceUnit} ·{' '}
+                  {Math.round(ydToDistance(card.incrementYd, distanceUnit))} {distanceUnit} steps
+                </Text>
+                <Text style={[type.secondary, { color: colors.accent, fontWeight: '700' }]}>
+                  Edit
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
 
           {status === 'loading' ? (
@@ -377,6 +398,27 @@ export default function RangeCardScreen() {
               </View>
             </>
           ) : null}
+
+          {card ? (
+            <CardDistancesModal
+              visible={distancesOpen}
+              distanceUnit={distanceUnit}
+              startYd={card.startDistanceYd}
+              endYd={card.endDistanceYd}
+              incrementYd={card.incrementYd}
+              onClose={() => setDistancesOpen(false)}
+              onApply={(s, e, i) =>
+                cardState
+                  .changeDistances(s, e, i)
+                  .catch((err: unknown) =>
+                    Alert.alert(
+                      'Could not update distances',
+                      err instanceof Error ? err.message : String(err),
+                    ),
+                  )
+              }
+            />
+          ) : null}
         </>
       )}
     </Screen>
@@ -385,6 +427,13 @@ export default function RangeCardScreen() {
 
 const styles = StyleSheet.create({
   controls: { paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
+  distancesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
   presetRow: {
     flexDirection: 'row',
     marginTop: spacing.sm,
