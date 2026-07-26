@@ -79,3 +79,15 @@ export const roundHold = (value: number, unit: TurretUnit) => {
 export function formatHold(value: number, unit: TurretUnit): string {
   return unit === 'MIL' ? value.toFixed(1) : value.toFixed(2);
 }
+
+/**
+ * Parse a barrel twist rate into inches per turn.
+ * Accepts "1:8", "1-8", "1/8", or a bare "8" (also decimals: "1:7.5").
+ * Returns null for anything unparseable or non-positive.
+ */
+export function parseTwistRate(s: string): number | null {
+  const m = s.trim().match(/^(?:1\s*[:\-/]\s*)?(\d+(?:\.\d+)?)$/);
+  if (!m) return null;
+  const inches = Number(m[1]);
+  return Number.isFinite(inches) && inches > 0 ? inches : null;
+}

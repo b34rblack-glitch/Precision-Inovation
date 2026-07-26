@@ -93,8 +93,11 @@ describe('solver: physics invariants', () => {
       densityKgM3: 1.225,
       speedOfSoundMps: 340.29,
       bcKgM2: 0.243 * 703.06958,
+      bcBands: null,
       bcModel: 'G7' as const,
       windMps: 0,
+      gAlongMps2: 0,
+      gPerpMps2: 9.80665,
     };
     // The guarded solver returns a flat (zero) launch angle rather than
     // diverging through atan2(x, 0).
