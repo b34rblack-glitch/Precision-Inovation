@@ -7,6 +7,7 @@ import m0002 from './0002_aromatic_sasquatch.sql';
 import m0003 from './0003_married_weapon_omega.sql';
 import m0004 from './0004_skinny_doctor_octopus.sql';
 import m0005 from './0005_gorgeous_smasher.sql';
+import m0006 from './0006_perpetual_vengeance.sql';
 
   export default {
     journal,
@@ -16,7 +17,8 @@ m0001,
 m0002,
 m0003,
 m0004,
-m0005
+m0005,
+m0006
     }
   }
   

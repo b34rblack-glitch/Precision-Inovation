@@ -1,4 +1,12 @@
-import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
 // Canonical storage units across the whole schema: grains, inches, fps, °F,
 // yards, inHg, feet. Conversion to a rifle's display units happens in the UI
@@ -35,6 +43,10 @@ export const rifles = sqliteTable('rifles', {
   // Consumers needing yards convert m -> yd via /0.9144 (see src/lib/units.ts).
   zeroDistance: real('zero_distance').notNull().default(100),
   photoUri: text('photo_uri'),
+  // Content hash of the photo's bytes. photoUri stays a device-local path (it
+  // means nothing on another device); this is what travels, letting a peer
+  // fetch the blob and point its own photoUri at a local copy.
+  photoSha256: text('photo_sha256'),
   notes: text('notes'),
   ...timestamps,
   ...archivable,
@@ -246,6 +258,8 @@ export const rangeSessions = sqliteTable(
     windSpeedMph: real('wind_speed_mph'),
     windDirClock: integer('wind_dir_clock'),
     targetPhotoUri: text('target_photo_uri'),
+    // See rifles.photoSha256.
+    targetPhotoSha256: text('target_photo_sha256'),
     notes: text('notes'),
     ...timestamps,
     ...archivable,
@@ -321,6 +335,68 @@ export const rangeCards = sqliteTable(
   ],
 );
 
+// ---------------------------------------------------------------------------
+// Sync bookkeeping
+//
+// Deliberately a sidecar rather than columns on the ten data tables:
+//   - tombstones must outlive their rows, which a column on the row cannot do
+//     without soft-deleting — and soft deletes would break the range_cards
+//     unique index and every isNull(archivedAt) query in the app;
+//   - load_versions is already 60 columns wide and close to SQLite's
+//     bind-variable ceiling during restore (see src/lib/tables.ts);
+//   - the backup payload shape stays byte-identical, so existing exports keep
+//     restoring into a sync-aware build.
+// ---------------------------------------------------------------------------
+
+/**
+ * One row per row of user data, including deleted ones. `hlc` is the logical
+ * timestamp of the last write; `writer` is its device (denormalised out of the
+ * HLC's node suffix purely so it can be indexed).
+ *
+ * No foreign keys to the data tables — a tombstone exists precisely when its
+ * row does not.
+ */
+export const syncRowMeta = sqliteTable(
+  'sync_row_meta',
+  {
+    tbl: text('tbl').notNull(),
+    rowId: text('row_id').notNull(),
+    hlc: text('hlc').notNull(),
+    writer: text('writer').notNull(),
+    deleted: integer('deleted', { mode: 'boolean' }).notNull().default(false),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tbl, t.rowId] }),
+    // "Which rows do I publish?" is `writer = me`.
+    index('sync_row_meta_writer_idx').on(t.writer),
+  ],
+);
+
+/** Single row (id = 1): this device's identity, clock, and Drive bookkeeping. */
+export const syncState = sqliteTable('sync_state', {
+  id: integer('id').primaryKey(),
+  deviceId: text('device_id').notNull(),
+  deviceName: text('device_name').notNull(),
+  platform: text('platform').notNull(),
+  // Persisted halves of the hybrid logical clock, written in the same
+  // transaction as the row they stamp so a crash cannot rewind them.
+  hlcMillis: integer('hlc_millis').notNull().default(0),
+  hlcCounter: integer('hlc_counter').notNull().default(0),
+  // Drive ids are cached because files.list is eventually consistent: a file
+  // just uploaded may not appear in a listing for several seconds.
+  rootFolderId: text('root_folder_id'),
+  devicesFolderId: text('devices_folder_id'),
+  blobsFolderId: text('blobs_folder_id'),
+  myFileId: text('my_file_id'),
+  manifestFileId: text('manifest_file_id'),
+  /** JSON: { [fileId]: { md5, modifiedTime } } — skips unchanged peer downloads. */
+  peerCacheJson: text('peer_cache_json'),
+  googleAccountEmail: text('google_account_email'),
+  lastSyncAt: integer('last_sync_at', { mode: 'timestamp_ms' }),
+  lastPublishedHlc: text('last_published_hlc'),
+  lastSyncError: text('last_sync_error'),
+});
+
 export type Rifle = typeof rifles.$inferSelect;
 export type NewRifle = typeof rifles.$inferInsert;
 export type Load = typeof loads.$inferSelect;
@@ -338,3 +414,6 @@ export type DopeEntry = typeof dopeEntries.$inferSelect;
 export type NewDopeEntry = typeof dopeEntries.$inferInsert;
 export type RangeCard = typeof rangeCards.$inferSelect;
 export type NewRangeCard = typeof rangeCards.$inferInsert;
+export type SyncRowMeta = typeof syncRowMeta.$inferSelect;
+export type NewSyncRowMeta = typeof syncRowMeta.$inferInsert;
+export type SyncState = typeof syncState.$inferSelect;

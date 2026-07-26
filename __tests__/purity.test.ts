@@ -23,6 +23,13 @@ const PURE_DIRS = [
   'src/sync',
 ];
 
+/**
+ * Subtrees of PURE_DIRS that are deliberately platform-bound. The sync engine
+ * is pure; the adapters that give it a Google token, an HTTP client and a
+ * database are not, and each platform supplies its own.
+ */
+const IMPURE_SUBDIRS = ['src/sync/platform/'];
+
 /** Individually pure files. */
 const PURE_FILES = [
   'src/lib/units.ts',
@@ -59,7 +66,9 @@ function walk(dir: string): string[] {
 }
 
 function pureFileSet(): string[] {
-  const fromDirs = PURE_DIRS.flatMap((d) => walk(d));
+  const fromDirs = PURE_DIRS.flatMap((d) => walk(d)).filter(
+    (f) => !IMPURE_SUBDIRS.some((sub) => f.split(path.sep).join('/').startsWith(sub)),
+  );
   const present = PURE_FILES.filter((f) => {
     try {
       statSync(path.join(ROOT, f));
