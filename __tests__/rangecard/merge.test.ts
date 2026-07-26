@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildCardRows, ObservedDope, trueMuzzleVelocity } from '@/lib/rangecard/merge';
+import {
+  buildCardRows,
+  ObservedDope,
+  trueDragScale,
+  trueMuzzleVelocity,
+} from '@/lib/rangecard/merge';
 import { BallisticInput } from '@/lib/ballistics/types';
 
 const solverInput: Omit<BallisticInput, 'windMph'> = {
@@ -153,6 +158,43 @@ describe('range card merge', () => {
     expect(rows.find((r) => r.distanceYd === 600)!.elevation).toBe(3.9);
   });
 
+  it('drift and aero-jump fields are zero without spin/coriolis inputs', () => {
+    const rows = buildCardRows({ solverInput, observations: [], turretUnit: 'MIL' });
+    expect(
+      rows.every(
+        (r) => r.driftIn === 0 && r.driftMil === 0 && r.driftMoa === 0 && r.aeroJumpIn === 0,
+      ),
+    ).toBe(true);
+  });
+
+  it('passes drift and aero jump through to rows, including off-grid appended rows', () => {
+    const advanced: Omit<BallisticInput, 'windMph'> = {
+      ...solverInput,
+      spin: { twistInPerTurn: 8, twistRight: true, bulletLengthIn: 1.4, bulletDiameterIn: 0.264 },
+      coriolis: { latitudeDeg: 45, azimuthDeg: 90 },
+      aeroJumpCrossMph: 10,
+    };
+    const rows = buildCardRows({
+      solverInput: advanced,
+      observations: [obs(570, 3.3, new Date('2026-07-01'))],
+      turretUnit: 'MIL',
+    });
+    // RH twist + northern latitude both drift RIGHT (positive).
+    const row800 = rows.find((r) => r.distanceYd === 800)!;
+    expect(row800.driftIn).toBeGreaterThan(0);
+    expect(row800.driftMil).toBeGreaterThan(0);
+    expect(row800.driftMoa).toBeCloseTo(row800.driftMil * 3.43774677, 4);
+    // RH twist + wind from the left (+10 mph) jumps the impact DOWN.
+    expect(row800.aeroJumpIn).toBeLessThan(0);
+    // Drift grows downrange.
+    expect(row800.driftIn).toBeGreaterThan(rows.find((r) => r.distanceYd === 100)!.driftIn);
+    // The off-grid confirmed row carries drift too (fresh single-distance solve).
+    const row570 = rows.find((r) => Math.abs(r.distanceYd - 570) < 1e-6)!;
+    expect(row570.confirmed).toBe(true);
+    expect(row570.driftIn).toBeGreaterThan(0);
+    expect(row570.aeroJumpIn).toBeLessThan(0);
+  });
+
   it('threads the supplied atmosphere through to the solver', () => {
     const thin = buildCardRows({
       solverInput: { ...solverInput, atmo: { tempF: 95, pressureInHg: 24.9 } },
@@ -198,5 +240,54 @@ describe('MV truing', () => {
         turretUnit: 'MIL',
       }),
     ).toBeNull();
+  });
+});
+
+
+describe('drag (BC) truing — stage 2', () => {
+  it('recovers a synthetic BC scale within ±2%', () => {
+    // Generate "observed" DOPE from a bullet whose real BC is 6% below the
+    // published value, then check the drag search recovers that scale with
+    // muzzle velocity held fixed.
+    const trueScale = 0.94;
+    const truthRows = buildCardRows({
+      solverInput: { ...solverInput, bcScale: trueScale },
+      observations: [],
+      turretUnit: 'MIL',
+    });
+    const observations: ObservedDope[] = [500, 700, 800].map((d) =>
+      obs(d, truthRows.find((r) => r.distanceYd === d)!.predictedElevation, new Date()),
+    );
+    const recovered = trueDragScale({ solverInput, observations, turretUnit: 'MIL' });
+    expect(recovered).not.toBeNull();
+    expect(Math.abs(recovered! - trueScale)).toBeLessThanOrEqual(0.02);
+  });
+
+  it('returns ~1.0 when the published BC already fits', () => {
+    const truthRows = buildCardRows({ solverInput, observations: [], turretUnit: 'MIL' });
+    const observations: ObservedDope[] = [500, 800].map((d) =>
+      obs(d, truthRows.find((r) => r.distanceYd === d)!.predictedElevation, new Date()),
+    );
+    const recovered = trueDragScale({ solverInput, observations, turretUnit: 'MIL' });
+    expect(recovered).not.toBeNull();
+    expect(Math.abs(recovered! - 1)).toBeLessThanOrEqual(0.02);
+  });
+
+  it('needs a long-range hold — short confirmations are refused', () => {
+    // 300 yd is enough for MV truing but not for drag truing (400+).
+    const observations = [obs(300, 1.4, new Date())];
+    expect(trueDragScale({ solverInput, observations, turretUnit: 'MIL' })).toBeNull();
+    expect(trueMuzzleVelocity({ solverInput, observations, turretUnit: 'MIL' })).not.toBeNull();
+  });
+
+  it('a lower scale means more drag and therefore more drop', () => {
+    const flat = buildCardRows({ solverInput, observations: [], turretUnit: 'MIL' });
+    const draggy = buildCardRows({
+      solverInput: { ...solverInput, bcScale: 0.85 },
+      observations: [],
+      turretUnit: 'MIL',
+    });
+    const at800 = (rows: typeof flat) => rows.find((r) => r.distanceYd === 800)!.predictedElevation;
+    expect(at800(draggy)).toBeGreaterThan(at800(flat));
   });
 });

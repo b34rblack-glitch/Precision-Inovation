@@ -101,6 +101,14 @@ export async function setCardDistances(
     .where(eq(rangeCards.id, cardId));
 }
 
+/** Stage-2 truing: drag scale factor multiplying the load's BC (null = reset). */
+export async function setCardBcScale(cardId: string, scale: number | null): Promise<void> {
+  await db
+    .update(rangeCards)
+    .set({ bcScaleFactor: scale, updatedAt: now() })
+    .where(eq(rangeCards.id, cardId));
+}
+
 export async function setCardMvOverride(cardId: string, mvFps: number | null): Promise<void> {
   await db
     .update(rangeCards)

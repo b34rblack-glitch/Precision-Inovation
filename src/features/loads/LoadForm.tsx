@@ -24,8 +24,33 @@ export type LoadFormResult = {
 const str = (s: string): string | null => (s.trim() === '' ? null : s.trim());
 
 type Errors = Partial<
-  Record<'name' | 'bulletWeight' | 'bcValue' | 'chargeGr' | 'brassFirings' | 'cbto' | 'coal' | 'mv', string>
+  Record<
+    | 'name'
+    | 'bulletWeight'
+    | 'bcValue'
+    | 'bulletLength'
+    | 'bulletDiameter'
+    | 'bcSegments'
+    | 'chargeGr'
+    | 'brassFirings'
+    | 'cbto'
+    | 'coal'
+    | 'mv'
+    | 'mvTempRef'
+    | 'mvTempSens',
+    string
+  >
 >;
+
+// Velocity-banded BC entry rows (Sierra-style). Fixed row count keeps the UI
+// simple; unused rows stay blank and are dropped on save.
+const BC_SEGMENT_ROWS = 4;
+
+const bcSegsFromVersion = (v?: LoadVersion): { vel: string; bc: string }[] =>
+  Array.from({ length: BC_SEGMENT_ROWS }, (_, i) => ({
+    vel: v?.bcSegments?.[i]?.minVelocityFps?.toString() ?? '',
+    bc: v?.bcSegments?.[i]?.bc?.toString() ?? '',
+  }));
 
 type Props = {
   initialLoad?: Load;
@@ -50,6 +75,13 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
   const [bulletWeight, setBulletWeight] = useState(initialVersion?.bulletWeightGr?.toString() ?? '');
   const [bcValue, setBcValue] = useState(initialVersion?.bcValue?.toString() ?? '');
   const [bcModel, setBcModel] = useState<'G1' | 'G7'>(initialVersion?.bcModel ?? 'G7');
+  const [bulletLength, setBulletLength] = useState(initialVersion?.bulletLengthIn?.toString() ?? '');
+  const [bulletDiameter, setBulletDiameter] = useState(
+    initialVersion?.bulletDiameterIn?.toString() ?? '',
+  );
+  const [bcSegs, setBcSegs] = useState<{ vel: string; bc: string }[]>(() =>
+    bcSegsFromVersion(initialVersion),
+  );
   const [powderName, setPowderName] = useState(initialVersion?.powderName ?? '');
   const [chargeGr, setChargeGr] = useState(initialVersion?.chargeGr?.toString() ?? '');
   const [primer, setPrimer] = useState(initialVersion?.primer ?? '');
@@ -59,6 +91,10 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
   const [coal, setCoal] = useState(initialVersion?.coalIn?.toString() ?? '');
   const [crimp, setCrimp] = useState(initialVersion?.crimp ?? '');
   const [mv, setMv] = useState(initialVersion?.muzzleVelocityFps?.toString() ?? '');
+  const [mvTempRef, setMvTempRef] = useState(initialVersion?.mvTempRefF?.toString() ?? '');
+  const [mvTempSens, setMvTempSens] = useState(
+    initialVersion?.mvTempSensFpsPerDegF?.toString() ?? '',
+  );
   const [notes, setNotes] = useState(initialVersion?.notes ?? '');
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -76,6 +112,9 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
     bulletWeight !== (initialVersion?.bulletWeightGr?.toString() ?? '') ||
     bcValue !== (initialVersion?.bcValue?.toString() ?? '') ||
     bcModel !== (initialVersion?.bcModel ?? 'G7') ||
+    bulletLength !== (initialVersion?.bulletLengthIn?.toString() ?? '') ||
+    bulletDiameter !== (initialVersion?.bulletDiameterIn?.toString() ?? '') ||
+    JSON.stringify(bcSegs) !== JSON.stringify(bcSegsFromVersion(initialVersion)) ||
     powderName !== (initialVersion?.powderName ?? '') ||
     chargeGr !== (initialVersion?.chargeGr?.toString() ?? '') ||
     primer !== (initialVersion?.primer ?? '') ||
@@ -85,6 +124,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
     coal !== (initialVersion?.coalIn?.toString() ?? '') ||
     crimp !== (initialVersion?.crimp ?? '') ||
     mv !== (initialVersion?.muzzleVelocityFps?.toString() ?? '') ||
+    mvTempRef !== (initialVersion?.mvTempRefF?.toString() ?? '') ||
+    mvTempSens !== (initialVersion?.mvTempSensFpsPerDegF?.toString() ?? '') ||
     notes !== (initialVersion?.notes ?? '');
 
   // While submitting the guard is down so the post-save navigation goes through;
@@ -105,12 +146,19 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
     setBulletMake(bullet.maker);
     setBulletModel(bullet.model);
     setBulletWeight(bullet.weightGr.toString());
+    // The catalog knows diameter but not length — length stays hand-entered.
+    setBulletDiameter(bullet.diameterIn.toString());
     const bc = bestBc(bullet);
     if (bc) {
       setBcValue(bc.bcValue.toString());
       setBcModel(bc.bcModel);
     }
-    setErrors((e) => ({ ...e, bulletWeight: undefined, bcValue: undefined }));
+    setErrors((e) => ({ ...e, bulletWeight: undefined, bcValue: undefined, bulletDiameter: undefined }));
+  };
+
+  const setBcSeg = (i: number, patch: Partial<{ vel: string; bc: string }>) => {
+    setBcSegs((rows) => rows.map((row, j) => (j === i ? { ...row, ...patch } : row)));
+    clearError('bcSegments');
   };
 
   const submit = async () => {
@@ -126,11 +174,32 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
     const bulletWeightGr = num(bulletWeight, 'bulletWeight');
     const bc = num(bcValue, 'bcValue');
     if (bc !== null && bc <= 0 && !errs.bcValue) errs.bcValue = 'BC must be greater than 0.';
+    const bulletLengthIn = num(bulletLength, 'bulletLength');
+    if (bulletLengthIn !== null && bulletLengthIn <= 0 && !errs.bulletLength)
+      errs.bulletLength = 'Length must be greater than 0.';
+    const bulletDiameterIn = num(bulletDiameter, 'bulletDiameter');
+    if (bulletDiameterIn !== null && bulletDiameterIn <= 0 && !errs.bulletDiameter)
+      errs.bulletDiameter = 'Diameter must be greater than 0.';
     const charge = num(chargeGr, 'chargeGr');
     const firings = num(brassFirings, 'brassFirings');
     const cbtoIn = num(cbto, 'cbto');
     const coalIn = num(coal, 'coal');
     const muzzleVelocityFps = num(mv, 'mv');
+    const mvTempRefF = num(mvTempRef, 'mvTempRef');
+    const mvTempSensFpsPerDegF = num(mvTempSens, 'mvTempSens');
+    // BC bands: a row counts only when BOTH halves are present and valid; a
+    // half-filled or garbage row blocks submit instead of being dropped.
+    const segments: { minVelocityFps: number; bc: number }[] = [];
+    for (const row of bcSegs) {
+      if (row.vel.trim() === '' && row.bc.trim() === '') continue;
+      const vel = parseDecimal(row.vel);
+      const segBc = parseDecimal(row.bc);
+      if (vel === null || vel < 0 || segBc === null || segBc <= 0) {
+        errs.bcSegments = 'Each band needs a min velocity (fps) and a BC greater than 0.';
+        break;
+      }
+      segments.push({ minVelocityFps: vel, bc: segBc });
+    }
     if (Object.values(errs).some(Boolean)) {
       setErrors(errs);
       return;
@@ -146,6 +215,9 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           bulletWeightGr,
           bcValue: bc,
           bcModel,
+          bulletLengthIn,
+          bulletDiameterIn,
+          bcSegments: segments.length > 0 ? segments : null,
           powderName: str(powderName),
           chargeGr: charge,
           primer: str(primer),
@@ -155,6 +227,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           coalIn,
           crimp: str(crimp),
           muzzleVelocityFps,
+          mvTempRefF,
+          mvTempSensFpsPerDegF,
           notes: str(notes),
         },
       });
@@ -234,6 +308,69 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           </Half>
         </Row>
         <Segmented label="BC model" options={['G7', 'G1'] as const} value={bcModel} onChange={setBcModel} />
+        <Row>
+          <Half>
+            <NumericField
+              label="Length"
+              value={bulletLength}
+              onChangeText={(v) => {
+                setBulletLength(v);
+                clearError('bulletLength');
+              }}
+              suffix="in"
+              placeholder="1.40"
+              error={errors.bulletLength}
+            />
+          </Half>
+          <Half>
+            <NumericField
+              label="Diameter"
+              value={bulletDiameter}
+              onChangeText={(v) => {
+                setBulletDiameter(v);
+                clearError('bulletDiameter');
+              }}
+              suffix="in"
+              placeholder="0.264"
+              error={errors.bulletDiameter}
+            />
+          </Half>
+        </Row>
+        <Text style={[type.secondary, styles.sectionHint]}>
+          Length + diameter enable the spin-drift estimate on range cards.
+        </Text>
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Velocity-banded BC (advanced)">
+        <Text style={[type.secondary, styles.sectionHint]}>
+          Sierra-style bands: each BC applies at or above its min velocity. Leave empty to use
+          the single BC above everywhere.
+        </Text>
+        {bcSegs.map((seg, i) => (
+          <Row key={i}>
+            <Half>
+              <NumericField
+                label={`Band ${i + 1} min velocity`}
+                value={seg.vel}
+                onChangeText={(v) => setBcSeg(i, { vel: v })}
+                suffix="fps"
+              />
+            </Half>
+            <Half>
+              <NumericField
+                label={`Band ${i + 1} BC`}
+                value={seg.bc}
+                onChangeText={(v) => setBcSeg(i, { bc: v })}
+                placeholder="0.326"
+              />
+            </Half>
+          </Row>
+        ))}
+        {errors.bcSegments ? (
+          <Text style={{ color: colors.danger, marginBottom: spacing.md }}>
+            {errors.bcSegments}
+          </Text>
+        ) : null}
       </CollapsibleSection>
 
       <CollapsibleSection title="Powder & primer" initiallyOpen>
@@ -333,6 +470,38 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           suffix="fps"
           error={errors.mv}
         />
+        <Row>
+          <Half>
+            <NumericField
+              label="MV measured at"
+              value={mvTempRef}
+              onChangeText={(v) => {
+                setMvTempRef(v);
+                clearError('mvTempRef');
+              }}
+              suffix="°F"
+              signed
+              placeholder="70"
+              error={errors.mvTempRef}
+            />
+          </Half>
+          <Half>
+            <NumericField
+              label="Temp sensitivity"
+              value={mvTempSens}
+              onChangeText={(v) => {
+                setMvTempSens(v);
+                clearError('mvTempSens');
+              }}
+              suffix="fps/°F"
+              placeholder="1.0"
+              error={errors.mvTempSens}
+            />
+          </Half>
+        </Row>
+        <Text style={[type.secondary, styles.sectionHint]}>
+          Range cards shift MV by sensitivity × (session temp − measured-at temp).
+        </Text>
         <Field label="Notes" value={notes} onChangeText={setNotes} multiline placeholder="Anything worth remembering about this recipe…" />
       </CollapsibleSection>
 
@@ -379,4 +548,5 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
 
 const styles = StyleSheet.create({
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  sectionHint: { marginBottom: spacing.md, color: colors.textTertiary },
 });

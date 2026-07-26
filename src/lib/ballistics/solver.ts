@@ -187,7 +187,7 @@ export function solveZeroAngle(input: {
 }
 
 /** Normalize user-supplied BC segments: drop garbage, sort descending, convert to SI. */
-function normalizeBcBands(segments: BcSegment[] | undefined): BcBand[] | null {
+function normalizeBcBands(segments: BcSegment[] | undefined, scale: number): BcBand[] | null {
   if (!segments || segments.length === 0) return null;
   const valid = segments.filter(
     (s) => Number.isFinite(s.minVelocityFps) && Number.isFinite(s.bc) && s.bc > 0,
@@ -196,7 +196,16 @@ function normalizeBcBands(segments: BcSegment[] | undefined): BcBand[] | null {
   return valid
     .slice()
     .sort((a, b) => b.minVelocityFps - a.minVelocityFps)
-    .map((s) => ({ minSpeedMps: fpsToMps(s.minVelocityFps), bcKgM2: s.bc * KG_M2_PER_LB_IN2 }));
+    .map((s) => ({
+      minSpeedMps: fpsToMps(s.minVelocityFps),
+      bcKgM2: s.bc * scale * KG_M2_PER_LB_IN2,
+    }));
+}
+
+/** Drag scale factor, guarded to a sane positive range (1 = published BC). */
+function normalizeBcScale(scale: number | undefined): number {
+  if (scale == null || !Number.isFinite(scale) || scale <= 0) return 1;
+  return scale;
 }
 
 /**
@@ -226,11 +235,14 @@ export function solveTrajectory(input: BallisticInput): TrajectoryPoint[] {
   // Uphill positive: gravity rotates in the slant-LOS frame. x stays along
   // the (now inclined) line of sight, so all distances remain slant ranges.
   const inclineRad = ((input.inclineDeg ?? 0) * Math.PI) / 180;
+  // Drag truing scales the BC itself, so it applies to the single BC and to
+  // every velocity band alike.
+  const bcScale = normalizeBcScale(input.bcScale);
   const env: Env = {
     densityKgM3: atmo.densityKgM3,
     speedOfSoundMps: atmo.speedOfSoundMps,
-    bcKgM2: input.bc * KG_M2_PER_LB_IN2,
-    bcBands: normalizeBcBands(input.bcSegments),
+    bcKgM2: input.bc * bcScale * KG_M2_PER_LB_IN2,
+    bcBands: normalizeBcBands(input.bcSegments, bcScale),
     bcModel: input.bcModel,
     windMps: mphToMps(input.windMph ?? 0),
     gAlongMps2: G * Math.sin(inclineRad),

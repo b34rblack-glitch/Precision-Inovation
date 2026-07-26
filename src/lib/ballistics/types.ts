@@ -64,6 +64,14 @@ export type BallisticInput = {
    * (blowing left→right). Requires `spin` — silently skipped without it.
    */
   aeroJumpCrossMph?: number;
+  /**
+   * Drag scale factor: multiplies the effective BC (and every bcSegment).
+   * 1 = published BC. Below 1 = more drag than the model predicts (steeper
+   * trajectory); above 1 = less. This is the "drag/DSF truing" knob — the
+   * correct thing to calibrate when muzzle velocity is already known from a
+   * chronograph, since the residual long-range error is then drag, not speed.
+   */
+  bcScale?: number;
 };
 
 export type TrajectoryPoint = {

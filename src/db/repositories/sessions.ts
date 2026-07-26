@@ -206,6 +206,77 @@ export async function deleteDopeEntry(id: string): Promise<void> {
 }
 
 /**
+ * Log a confirmed hold straight from the range card, without making the
+ * shooter go create a session first. Reuses today's session for this rifle +
+ * load if one exists (so a day's confirmations group naturally); otherwise
+ * opens one silently. Returns the session used.
+ */
+export async function quickAddDope(params: {
+  rifleId: string;
+  loadVersionId: string | null;
+  distanceYd: number;
+  elevationHold: number | null;
+  windageHold: number | null;
+  holdUnit: 'MIL' | 'MOA';
+  confirmed: boolean;
+  notes?: string | null;
+}): Promise<{ sessionId: string; createdSession: boolean }> {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const candidates = await db
+    .select()
+    .from(rangeSessions)
+    .where(
+      and(
+        eq(rangeSessions.rifleId, params.rifleId),
+        isNull(rangeSessions.archivedAt),
+        params.loadVersionId == null
+          ? isNull(rangeSessions.loadVersionId)
+          : eq(rangeSessions.loadVersionId, params.loadVersionId),
+      ),
+    )
+    .orderBy(desc(rangeSessions.date))
+    .limit(1);
+
+  const todays = candidates.find((s) => s.date >= startOfDay);
+  let sessionId = todays?.id;
+  let createdSession = false;
+  if (!sessionId) {
+    const session = await createSession({
+      rifleId: params.rifleId,
+      loadVersionId: params.loadVersionId,
+      date: now(),
+      location: null,
+      tempF: null,
+      pressureInHg: null,
+      altitudeFt: null,
+      humidityPct: null,
+      windSpeedMph: null,
+      windDirClock: null,
+      targetPhotoUri: null,
+      notes: 'Started from the range card',
+    });
+    sessionId = session.id;
+    createdSession = true;
+  }
+
+  await addDopeEntry({
+    sessionId,
+    distanceYd: params.distanceYd,
+    elevationHold: params.elevationHold,
+    windageHold: params.windageHold,
+    holdUnit: params.holdUnit,
+    groupSizeIn: null,
+    poiUpIn: null,
+    poiRightIn: null,
+    confirmed: params.confirmed,
+    notes: params.notes ?? null,
+  });
+  return { sessionId, createdSession };
+}
+
+/**
  * Create a chronograph string. With per-shot velocities the summary stats are
  * computed here (sample SD, n-1) and cached on the string row; without them
  * the manually entered summary is stored as-is.

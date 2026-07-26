@@ -13,7 +13,11 @@ import { Screen } from '@/components/Screen';
 import { activeLoadsQuery } from '@/db/repositories/loads';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
 import { useRangeCard } from '@/features/rangecard/useRangeCard';
+import { CardBallisticsModal } from '@/features/rangecard/CardBallisticsModal';
 import { CardDistancesModal } from '@/features/rangecard/CardDistancesModal';
+import { QuickDopeModal, QuickDopeValues } from '@/features/rangecard/QuickDopeModal';
+import { quickAddDope } from '@/db/repositories/sessions';
+import { CardRow } from '@/lib/rangecard/merge';
 import { rangeCardHtml } from '@/lib/rangecard/pdfHtml';
 import { formatHold, holdToUnit, TurretUnit, ydToDistance } from '@/lib/units';
 import { colors, radii, spacing, touchTarget, type } from '@/theme';
@@ -35,15 +39,37 @@ export default function RangeCardScreen() {
     rifleLoads.find((l) => l.id === selectedLoadId) ?? rifleLoads[0] ?? null;
 
   const cardState = useRangeCard(rifle, activeLoad?.currentVersionId ?? null);
-  const { rows, status, errorMessage, missing, card, version, mvFps, mvSource, confirmedCount } =
-    cardState;
-  // BC is constant for the whole card (the bullet's), shown on every row per request.
-  const bcText = version?.bcValue != null ? version.bcValue.toFixed(3) : '—';
+  const {
+    rows,
+    status,
+    errorMessage,
+    missing,
+    card,
+    version,
+    mvFps,
+    mvSource,
+    mvTempAdjusted,
+    loggedWind,
+    advanced,
+    confirmedCount,
+    bcScale,
+  } = cardState;
+  // BC is constant for the whole card (the bullet's), shown on every row per
+  // request. When drag truing is active the rows show the calibrated BC.
+  const effectiveBc = version?.bcValue != null ? version.bcValue * (bcScale ?? 1) : null;
+  const bcText = effectiveBc != null ? effectiveBc.toFixed(3) : '—';
   const bcModelText = version?.bcModel ?? '';
   const [sharing, setSharing] = useState(false);
   // Guards preset switches and true-up against double-tap stacking writes/alerts.
   const [busy, setBusy] = useState(false);
   const [distancesOpen, setDistancesOpen] = useState(false);
+  // Quick-add confirmed holds without leaving the card. Tapping a row seeds
+  // the sheet with that row's distance and prediction.
+  const [quickDope, setQuickDope] = useState<{ distanceYd: number | null; predicted: number | null } | null>(
+    null,
+  );
+  const [loggingDope, setLoggingDope] = useState(false);
+  const [ballisticsOpen, setBallisticsOpen] = useState(false);
   // Which unit the hold columns display in. Null = the rifle's turret unit;
   // switch to MIL for mil-dot reticle holdovers (or MOA) regardless of turret.
   const [holdUnitOverride, setHoldUnitOverride] = useState<TurretUnit | null>(null);
@@ -58,6 +84,41 @@ export default function RangeCardScreen() {
   const toHold = (v: number) => holdToUnit(v, turretUnit, holdUnit);
   const unitWord = distanceUnit === 'yd' ? 'yards' : 'meters';
 
+  // DRIFT column only earns its space when the effect is visible on paper.
+  const driftActive = rows.some((r) => Math.abs(r.driftIn) > 0.05);
+  // Logged-wind column: shown only when the card opted in AND a session
+  // actually logged a wind speed.
+  const wLog = card?.useLoggedWind ? loggedWind : null;
+  // DRIFT shows the HOLD for spin + Coriolis: driftIn > 0 = impact drifts
+  // RIGHT, so the shooter holds LEFT ('L'); negative drifts left → 'R'.
+  // driftMil/driftMoa already carry both units — no toHold conversion needed.
+  const driftText = (r: CardRow) =>
+    `${formatHold(Math.abs(holdUnit === 'MIL' ? r.driftMil : r.driftMoa), holdUnit)} ${
+      r.driftIn > 0 ? 'L' : 'R'
+    }`;
+  // W·LOG scales the solver's 10 mph reference hold linearly to the logged
+  // crosswind (|cross|/10). Direction is the hold INTO the wind: crossMph < 0
+  // = wind from the RIGHT (3 o'clock) deflects the bullet left → hold RIGHT
+  // ('R'); crossMph > 0 = wind from the left → hold LEFT ('L').
+  const wLogText = (r: CardRow) =>
+    wLog
+      ? `${formatHold(toHold(r.wind10Mph) * (Math.abs(wLog.crossMph) / 10), holdUnit)} ${
+          wLog.crossMph < 0 ? 'R' : 'L'
+        }`
+      : '';
+
+  const advancedSummary = (() => {
+    if (!card) return 'Advanced: off';
+    const parts: string[] = [];
+    if (card.latitudeDeg != null && card.azimuthDeg != null)
+      parts.push(`lat ${card.latitudeDeg} · az ${card.azimuthDeg}°`);
+    if (card.inclineDeg != null)
+      parts.push(`${card.inclineDeg >= 0 ? '+' : ''}${card.inclineDeg}°`);
+    if (advanced.spinActive) parts.push('spin ✓');
+    if (card.useLoggedWind) parts.push('wind log');
+    return parts.length > 0 ? parts.join(' · ') : 'Advanced: off';
+  })();
+
   const sharePdf = async () => {
     if (status !== 'ready' || !activeLoad || mvFps == null || sharing) return;
     setSharing(true);
@@ -70,11 +131,21 @@ export default function RangeCardScreen() {
         holdUnit,
         distanceUnit,
         mvFps,
-        bcValue: version?.bcValue ?? null,
+        // Print the calibrated BC the card actually solved with.
+        bcValue: effectiveBc,
         bcModel: version?.bcModel ?? null,
         zeroLabel: `${rifle.zeroDistance} ${distanceUnit}`,
         rows,
         generatedOn: new Date(),
+        advanced: {
+          spinDrift: advanced.spinActive,
+          coriolis:
+            card?.latitudeDeg != null && card?.azimuthDeg != null
+              ? { latitudeDeg: card.latitudeDeg, azimuthDeg: card.azimuthDeg }
+              : null,
+          inclineDeg: card?.inclineDeg ?? null,
+          mvTempAdjusted,
+        },
       });
       const { uri } = await Print.printToFileAsync({ html });
       if (await Sharing.isAvailableAsync()) {
@@ -87,20 +158,57 @@ export default function RangeCardScreen() {
     }
   };
 
-  const runTrueUp = async () => {
+  /**
+   * Log a confirmed hold straight from the card. quickAddDope reuses today's
+   * session for this rifle + load (or opens one silently), so the shooter
+   * never has to bounce to the Range tab mid-string.
+   */
+  const submitQuickDope = async (values: QuickDopeValues) => {
+    if (loggingDope) return;
+    setLoggingDope(true);
+    try {
+      const { createdSession } = await quickAddDope({
+        rifleId: rifle.id,
+        loadVersionId: activeLoad?.currentVersionId ?? null,
+        distanceYd: values.distanceYd,
+        elevationHold: values.elevationHold,
+        windageHold: values.windageHold,
+        holdUnit: turretUnit,
+        confirmed: values.confirmed,
+      });
+      setQuickDope(null);
+      cardState.refresh();
+      if (createdSession) {
+        Alert.alert(
+          'Hold logged',
+          'Started a new range session for today — add conditions to it from the Range tab whenever you like.',
+        );
+      }
+    } catch (e) {
+      Alert.alert('Could not log the hold', e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoggingDope(false);
+    }
+  };
+
+  const applyTrueUp = async (mode: 'mv' | 'drag') => {
     if (busy) return;
     setBusy(true);
     try {
-      const trued = await cardState.trueUp();
-      if (trued == null) {
+      const result = await cardState.trueUp(mode);
+      if (result.mode === 'none') {
+        Alert.alert('Not enough DOPE', result.reason);
+      } else if (result.mode === 'mv') {
         Alert.alert(
-          'Not enough DOPE',
-          'Truing needs at least one confirmed elevation hold at 300+ yards for this rifle and load.',
+          'Velocity calibrated',
+          `Muzzle velocity solved to ${result.mvFps} fps from your confirmed DOPE. Predictions updated.`,
         );
       } else {
         Alert.alert(
-          'Velocity trued',
-          `Muzzle velocity calibrated to ${trued} fps from your confirmed DOPE. Predictions updated.`,
+          'Drag calibrated',
+          `BC scaled ×${result.bcScale.toFixed(3)} (effective BC ${(
+            (version?.bcValue ?? 0) * result.bcScale
+          ).toFixed(3)}) from your long-range DOPE. Muzzle velocity was left alone.`,
         );
       }
     } catch (e) {
@@ -108,6 +216,49 @@ export default function RangeCardScreen() {
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * Two-stage truing, industry standard (AB "DSF" / Hornady "axial form
+   * factor"): velocity first, then drag. Which knob is correct depends on
+   * whether the muzzle velocity is already trustworthy — bending MV to fit a
+   * long shot when it came from a chronograph mis-models the whole curve.
+   */
+  const runTrueUp = () => {
+    if (busy) return;
+    if (mvSource === 'measured') {
+      // MV came from a chrono string: velocity is measured, so the residual
+      // long-range error is drag. Calibrate BC without asking.
+      applyTrueUp('drag');
+      return;
+    }
+    Alert.alert(
+      'Calibrate against your DOPE',
+      'Which value should be solved?\n\n' +
+        '• Velocity — if your muzzle velocity is a guess or from a manual.\n' +
+        '• Drag (BC) — if your muzzle velocity is measured with a chronograph; long-range error is then the drag model, not the speed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Velocity', onPress: () => applyTrueUp('mv') },
+        { text: 'Drag (BC)', onPress: () => applyTrueUp('drag') },
+      ],
+    );
+  };
+
+  const confirmResetBc = () => {
+    Alert.alert('Discard drag calibration?', 'The card returns to the published BC.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Discard',
+        style: 'destructive',
+        onPress: () =>
+          cardState
+            .clearBcScale()
+            .catch((e: unknown) =>
+              Alert.alert('Reset failed', e instanceof Error ? e.message : String(e)),
+            ),
+      },
+    ]);
   };
 
   const changePreset = (p: 'bench' | 'hunting') => {
@@ -216,6 +367,23 @@ export default function RangeCardScreen() {
               </Pressable>
             ) : null}
 
+            {card ? (
+              <Pressable
+                onPress={() => setBallisticsOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Edit advanced ballistics"
+                style={({ pressed }) => [styles.distancesRow, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="compass-outline" size={18} color={colors.textSecondary} />
+                <Text style={[type.secondary, { flex: 1 }]} numberOfLines={1}>
+                  {advancedSummary}
+                </Text>
+                <Text style={[type.secondary, { color: colors.accent, fontWeight: '700' }]}>
+                  Advanced
+                </Text>
+              </Pressable>
+            ) : null}
+
             {/* Hold display unit — pick MIL for mil-dot reticle holdovers. */}
             <View style={styles.holdUnitRow}>
               <Text style={[type.secondary, { marginRight: spacing.sm }]}>Holds in</Text>
@@ -289,38 +457,61 @@ export default function RangeCardScreen() {
                 <Text style={[type.secondary, { flex: 1 }]}>
                   MV {mvFps != null ? Math.round(mvFps) : '—'} fps
                   {mvSource === 'override' ? ' (trued)' : mvSource === 'measured' ? ' (chrono)' : ''}
+                  {mvTempAdjusted ? ' (temp adj)' : ''}
                   {'  ·  '}BC {bcText} {bcModelText}
+                  {bcScale != null && version?.bcValue != null
+                    ? ` (trued ×${bcScale.toFixed(3)} from ${version.bcValue.toFixed(3)})`
+                    : ''}
                   {'  ·  '}
                   {confirmedCount} confirmed
                 </Text>
-                {mvSource === 'override' ? (
-                  <Pressable
-                    onPress={confirmReset}
-                    disabled={busy}
-                    accessibilityRole="button"
-                    accessibilityLabel="Reset trued muzzle velocity"
-                    accessibilityState={{ disabled: busy }}
-                    style={styles.mvBtn}
-                  >
-                    <Text style={[type.secondary, { color: colors.danger, fontWeight: '700' }]}>
-                      Reset
-                    </Text>
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    onPress={runTrueUp}
-                    disabled={busy}
-                    accessibilityRole="button"
-                    accessibilityLabel="True up muzzle velocity from confirmed DOPE"
-                    accessibilityState={{ disabled: busy }}
-                    style={styles.mvBtn}
-                  >
-                    <Text style={[type.secondary, { color: colors.accent, fontWeight: '700' }]}>
-                      True-up MV
-                    </Text>
-                  </Pressable>
-                )}
+                <Pressable
+                  onPress={runTrueUp}
+                  disabled={busy}
+                  accessibilityRole="button"
+                  accessibilityLabel="Calibrate velocity or drag from confirmed DOPE"
+                  accessibilityState={{ disabled: busy }}
+                  style={styles.mvBtn}
+                >
+                  <Text style={[type.secondary, { color: colors.accent, fontWeight: '700' }]}>
+                    True-up
+                  </Text>
+                </Pressable>
               </View>
+
+              {mvSource === 'override' || bcScale != null ? (
+                <View style={styles.mvRow}>
+                  <Text style={[type.secondary, { flex: 1, color: colors.textTertiary }]}>
+                    Calibration applied
+                  </Text>
+                  {mvSource === 'override' ? (
+                    <Pressable
+                      onPress={confirmReset}
+                      disabled={busy}
+                      accessibilityRole="button"
+                      accessibilityLabel="Reset trued muzzle velocity"
+                      style={styles.mvBtn}
+                    >
+                      <Text style={[type.secondary, { color: colors.danger, fontWeight: '700' }]}>
+                        Reset MV
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {bcScale != null ? (
+                    <Pressable
+                      onPress={confirmResetBc}
+                      disabled={busy}
+                      accessibilityRole="button"
+                      accessibilityLabel="Reset drag calibration"
+                      style={styles.mvBtn}
+                    >
+                      <Text style={[type.secondary, { color: colors.danger, fontWeight: '700' }]}>
+                        Reset BC
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
 
               {/* Header row */}
               <View style={[styles.row, styles.headerRow]}>
@@ -328,8 +519,18 @@ export default function RangeCardScreen() {
                   {distanceUnit.toUpperCase()}
                 </Text>
                 <Text style={[styles.cell, styles.headerCell]}>ELEV {holdUnit}</Text>
-                <Text style={[styles.cell, styles.headerCell]}>W5</Text>
+                {/* When the logged-wind column is on, W5 is dropped: with an
+                    optional DRIFT column too, seven data columns don't fit a
+                    phone-width row. W10 stays as the fixed scaling reference. */}
+                {wLog ? (
+                  <Text style={[styles.cell, styles.headerCell]}>W·LOG</Text>
+                ) : (
+                  <Text style={[styles.cell, styles.headerCell]}>W5</Text>
+                )}
                 <Text style={[styles.cell, styles.headerCell]}>W10</Text>
+                {driftActive ? (
+                  <Text style={[styles.cell, styles.headerCell]}>DRIFT</Text>
+                ) : null}
                 <Text style={[styles.cell, styles.headerCell]}>FPS</Text>
                 <Text style={[styles.cell, styles.headerCell]}>BC</Text>
               </View>
@@ -345,11 +546,28 @@ export default function RangeCardScreen() {
                   const dimPred = transonic && !r.confirmed;
                   const elevDisp = toHold(r.elevation);
                   const predDisp = toHold(r.predictedElevation);
+                  // 'L'/'R' in DRIFT and W·LOG is the HOLD direction (see
+                  // driftText/wLogText above); spell it out for screen readers.
+                  const wLogWord = wLog
+                    ? `, logged wind hold ${wLogText(r).replace(/ R$/, ' right').replace(/ L$/, ' left')}`
+                    : '';
+                  const driftWord = driftActive
+                    ? `, drift hold ${driftText(r).replace(/ R$/, ' right').replace(/ L$/, ' left')}`
+                    : '';
                   return (
-                    <View
+                    <Pressable
                       key={r.distanceYd}
+                      // Tapping a row logs a confirmed hold at that distance —
+                      // the sheet opens prefilled with the row's prediction.
+                      onPress={() =>
+                        // The sheet works in the rifle's turret unit, so pass
+                        // the stored hold rather than the display conversion.
+                        setQuickDope({ distanceYd: r.distanceYd, predicted: r.elevation })
+                      }
                       accessible={true}
-                      accessibilityLabel={`${dist} ${unitWord}, elevation ${formatHold(elevDisp, holdUnit)} ${holdUnit} ${r.confirmed ? 'confirmed' : 'predicted'}, wind ten ${formatHold(toHold(r.wind10Mph), holdUnit)}, ${Math.round(r.velocityFps)} fps, BC ${bcText}${machWord}`}
+                      accessibilityRole="button"
+                      accessibilityHint="Log a confirmed hold at this distance"
+                      accessibilityLabel={`${dist} ${unitWord}, elevation ${formatHold(elevDisp, holdUnit)} ${holdUnit} ${r.confirmed ? 'confirmed' : 'predicted'}${wLogWord}, wind ten ${formatHold(toHold(r.wind10Mph), holdUnit)}${driftWord}, ${Math.round(r.velocityFps)} fps, BC ${bcText}${machWord}`}
                       style={[styles.row, r.confirmed && styles.confirmedRow, dimPred && styles.transonicRow]}
                     >
                       <Text style={[styles.cell, styles.distCell]}>
@@ -372,14 +590,17 @@ export default function RangeCardScreen() {
                         ) : null}
                       </View>
                       <Text style={[styles.cell, styles.dimText]}>
-                        {formatHold(toHold(r.wind5Mph), holdUnit)}
+                        {wLog ? wLogText(r) : formatHold(toHold(r.wind5Mph), holdUnit)}
                       </Text>
                       <Text style={[styles.cell, styles.dimText]}>
                         {formatHold(toHold(r.wind10Mph), holdUnit)}
                       </Text>
+                      {driftActive ? (
+                        <Text style={[styles.cell, styles.dimText]}>{driftText(r)}</Text>
+                      ) : null}
                       <Text style={[styles.cell, styles.dimText]}>{Math.round(r.velocityFps)}</Text>
                       <Text style={[styles.cell, styles.dimText]}>{bcText}</Text>
-                    </View>
+                    </Pressable>
                   );
                 })}
                 {rows.some((r) => r.mach < 1.2) ? (
@@ -387,10 +608,25 @@ export default function RangeCardScreen() {
                     {'‡ transonic (Mach < 1.2) · ‡‡ subsonic — predictions less reliable'}
                   </Text>
                 ) : null}
+                {driftActive || wLog ? (
+                  <Text style={styles.footnote}>
+                    L/R = hold direction
+                    {driftActive ? ' · DRIFT = spin + Coriolis' : ''}
+                    {wLog
+                      ? ` · W·LOG from ${Math.round(wLog.speedMph)} mph @ ${wLog.dirClock} o'clock`
+                      : ''}
+                  </Text>
+                ) : null}
                 <View style={{ height: spacing.xxl }} />
               </ScrollView>
 
               <View style={styles.actions}>
+                <Button
+                  label="+ Log Hold"
+                  variant="secondary"
+                  onPress={() => setQuickDope({ distanceYd: null, predicted: null })}
+                  style={{ flex: 1 }}
+                />
                 <Button
                   label="Field Mode"
                   onPress={() =>
@@ -423,6 +659,17 @@ export default function RangeCardScreen() {
             </>
           ) : null}
 
+          <QuickDopeModal
+            visible={quickDope != null}
+            distanceUnit={distanceUnit}
+            turretUnit={turretUnit}
+            initialDistanceYd={quickDope?.distanceYd ?? null}
+            predictedElevation={quickDope?.predicted ?? null}
+            saving={loggingDope}
+            onClose={() => setQuickDope(null)}
+            onSubmit={submitQuickDope}
+          />
+
           {card ? (
             <CardDistancesModal
               visible={distancesOpen}
@@ -437,6 +684,31 @@ export default function RangeCardScreen() {
                   .catch((err: unknown) =>
                     Alert.alert(
                       'Could not update distances',
+                      err instanceof Error ? err.message : String(err),
+                    ),
+                  )
+              }
+            />
+          ) : null}
+
+          {card ? (
+            <CardBallisticsModal
+              // Remount when the card's stored values change so the sheet
+              // reopens with what's actually saved, not a stale draft.
+              key={`${card.id}-${card.updatedAt.getTime()}`}
+              visible={ballisticsOpen}
+              latitudeDeg={card.latitudeDeg}
+              azimuthDeg={card.azimuthDeg}
+              inclineDeg={card.inclineDeg}
+              useLoggedWind={card.useLoggedWind}
+              spinDriftEnabled={card.spinDriftEnabled}
+              onClose={() => setBallisticsOpen(false)}
+              onApply={(values) =>
+                cardState
+                  .setBallistics(values)
+                  .catch((err: unknown) =>
+                    Alert.alert(
+                      'Could not update ballistics',
                       err instanceof Error ? err.message : String(err),
                     ),
                   )

@@ -27,6 +27,9 @@ export default function FieldCardScreen() {
   if (!rifle) return <View style={styles.root} />;
 
   const unitWord = rifle.distanceUnit === 'yd' ? 'yards' : 'meters';
+  // DRIFT column (spin + Coriolis hold) renders only when the effect is
+  // actually visible — field mode stays as sparse as possible otherwise.
+  const driftActive = rows.some((r) => Math.abs(r.driftIn) > 0.05);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top + 8 }]}>
@@ -59,6 +62,7 @@ export default function FieldCardScreen() {
             <Text style={styles.colHeadDist}>DIST</Text>
             <Text style={styles.colHeadHold}>ELEV</Text>
             <Text style={styles.colHeadWind}>W10</Text>
+            {driftActive ? <Text style={styles.colHeadDrift}>DRIFT</Text> : null}
           </View>
           <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
             {rows.map((r) => {
@@ -70,11 +74,19 @@ export default function FieldCardScreen() {
               // Only dim *predictions* in the transonic zone — confirmed DOPE
               // stays bright because it was actually observed.
               const dimPred = transonic && !r.confirmed;
+              // DRIFT is the HOLD for spin + Coriolis: driftIn > 0 = impact
+              // drifts RIGHT → hold LEFT ('L'); negative → hold RIGHT ('R').
+              const driftVal = rifle.turretUnit === 'MIL' ? r.driftMil : r.driftMoa;
+              const driftHold = formatHold(Math.abs(driftVal), rifle.turretUnit);
+              const driftDir = r.driftIn > 0 ? 'L' : 'R';
+              const driftWord = driftActive
+                ? `, drift hold ${driftHold} ${driftDir === 'L' ? 'left' : 'right'}`
+                : '';
               return (
                 <View
                   key={r.distanceYd}
                   accessible={true}
-                  accessibilityLabel={`${dist} ${unitWord}, hold ${formatHold(r.elevation, rifle.turretUnit)} ${rifle.turretUnit}, ${r.confirmed ? 'confirmed' : 'predicted'}, wind ten ${formatHold(r.wind10Mph, rifle.turretUnit)} ${rifle.turretUnit}${machWord}`}
+                  accessibilityLabel={`${dist} ${unitWord}, hold ${formatHold(r.elevation, rifle.turretUnit)} ${rifle.turretUnit}, ${r.confirmed ? 'confirmed' : 'predicted'}, wind ten ${formatHold(r.wind10Mph, rifle.turretUnit)} ${rifle.turretUnit}${driftWord}${machWord}`}
                   style={[styles.row, dimPred && styles.transonicRow]}
                 >
                   <Text style={styles.dist} maxFontSizeMultiplier={1.2}>
@@ -91,6 +103,12 @@ export default function FieldCardScreen() {
                   <Text style={styles.wind} maxFontSizeMultiplier={1.2}>
                     {formatHold(r.wind10Mph, rifle.turretUnit)}
                   </Text>
+                  {driftActive ? (
+                    <Text style={styles.drift} maxFontSizeMultiplier={1.2}>
+                      {driftHold}
+                      <Text style={styles.driftDir}>{` ${driftDir}`}</Text>
+                    </Text>
+                  ) : null}
                 </View>
               );
             })}
@@ -138,6 +156,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
   },
+  colHeadDrift: {
+    minWidth: 76,
+    textAlign: 'right',
+    color: '#8F6D00',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'baseline',
@@ -175,4 +201,15 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     fontVariant: ['tabular-nums'],
   },
+  // Deliberately dimmer + smaller than W10: drift is a secondary correction.
+  drift: {
+    minWidth: 76,
+    flexShrink: 0,
+    color: '#8F6D00',
+    fontSize: 22,
+    fontWeight: '700',
+    textAlign: 'right',
+    fontVariant: ['tabular-nums'],
+  },
+  driftDir: { fontSize: 14 },
 });

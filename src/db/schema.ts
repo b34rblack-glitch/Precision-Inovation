@@ -244,6 +244,10 @@ export const rangeCards = sqliteTable(
     endDistanceYd: real('end_distance_yd').notNull().default(1000),
     incrementYd: real('increment_yd').notNull().default(50),
     mvOverrideFps: real('mv_override_fps'),
+    // Drag truing: multiplies the load's BC (1 = published). Stage 2 of the
+    // two-stage truing flow — the right knob when MV is known from a chrono,
+    // since the residual long-range error is then drag rather than velocity.
+    bcScaleFactor: real('bc_scale_factor'),
     atmoSnapshot: text('atmo_snapshot', { mode: 'json' }),
     latitudeDeg: real('latitude_deg'), // degrees, -90..90 (south negative); Coriolis
     azimuthDeg: real('azimuth_deg'), // degrees, 0..360 from true north; Coriolis
