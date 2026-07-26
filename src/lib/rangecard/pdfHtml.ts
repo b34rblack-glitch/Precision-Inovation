@@ -13,13 +13,15 @@ export type PdfCardParams = {
   turretUnit: TurretUnit;
   distanceUnit: DistanceUnit;
   mvFps: number;
+  bcValue: number | null;
+  bcModel: string | null;
   zeroLabel: string;
   rows: CardRow[];
   generatedOn: Date;
 };
 
 export function rangeCardHtml(p: PdfCardParams): string {
-  const showVelocity = p.preset === 'bench';
+  const bcText = p.bcValue != null ? p.bcValue.toFixed(3) : '—';
   const rowsHtml = p.rows
     .map((r) => {
       const dist = Math.round(ydToDistance(r.distanceYd, p.distanceUnit));
@@ -30,8 +32,9 @@ export function rangeCardHtml(p: PdfCardParams): string {
         <td class="hold">${formatHold(r.elevation, p.turretUnit)}</td>
         <td>${formatHold(r.wind5Mph, p.turretUnit)}</td>
         <td>${formatHold(r.wind10Mph, p.turretUnit)}</td>
-        ${showVelocity ? `<td>${Math.round(r.velocityFps)}</td>` : ''}
-        ${!showVelocity ? `<td>${r.energyFtLb != null ? Math.round(r.energyFtLb) : '—'}</td>` : ''}
+        <td>${Math.round(r.velocityFps)}</td>
+        <td>${r.energyFtLb != null ? Math.round(r.energyFtLb) : '—'}</td>
+        <td>${bcText}</td>
         <td class="marker">${marker}</td>
       </tr>`;
     })
@@ -66,7 +69,9 @@ export function rangeCardHtml(p: PdfCardParams): string {
   <div class="head">
     <div class="rifle">${escapeHtml(p.rifleName)}</div>
     <div class="load">${escapeHtml(p.loadLabel)}</div>
-    <div class="meta">MV ${Math.round(p.mvFps)} fps · zero ${escapeHtml(p.zeroLabel)} · ${
+    <div class="meta">MV ${Math.round(p.mvFps)} fps · BC ${bcText} ${escapeHtml(
+      p.bcModel ?? '',
+    )} · zero ${escapeHtml(p.zeroLabel)} · ${
       p.preset === 'bench' ? 'BENCH' : 'HUNTING'
     } · ${p.generatedOn.toLocaleDateString()}</div>
   </div>
@@ -77,7 +82,9 @@ export function rangeCardHtml(p: PdfCardParams): string {
         <th>Elev ${p.turretUnit}</th>
         <th>W5</th>
         <th>W10</th>
-        ${showVelocity ? '<th>fps</th>' : '<th>ft·lb</th>'}
+        <th>fps</th>
+        <th>ft·lb</th>
+        <th>BC</th>
         <th></th>
       </tr>
     </thead>

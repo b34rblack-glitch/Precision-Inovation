@@ -35,7 +35,11 @@ export default function RangeCardScreen() {
     rifleLoads.find((l) => l.id === selectedLoadId) ?? rifleLoads[0] ?? null;
 
   const cardState = useRangeCard(rifle, activeLoad?.currentVersionId ?? null);
-  const { rows, status, errorMessage, missing, card, mvFps, mvSource, confirmedCount } = cardState;
+  const { rows, status, errorMessage, missing, card, version, mvFps, mvSource, confirmedCount } =
+    cardState;
+  // BC is constant for the whole card (the bullet's), shown on every row per request.
+  const bcText = version?.bcValue != null ? version.bcValue.toFixed(3) : '—';
+  const bcModelText = version?.bcModel ?? '';
   const [sharing, setSharing] = useState(false);
   // Guards preset switches and true-up against double-tap stacking writes/alerts.
   const [busy, setBusy] = useState(false);
@@ -59,6 +63,8 @@ export default function RangeCardScreen() {
         turretUnit,
         distanceUnit,
         mvFps,
+        bcValue: version?.bcValue ?? null,
+        bcModel: version?.bcModel ?? null,
         zeroLabel: `${rifle.zeroDistance} ${distanceUnit}`,
         rows,
         generatedOn: new Date(),
@@ -253,6 +259,7 @@ export default function RangeCardScreen() {
                 <Text style={[type.secondary, { flex: 1 }]}>
                   MV {mvFps != null ? Math.round(mvFps) : '—'} fps
                   {mvSource === 'override' ? ' (trued)' : mvSource === 'measured' ? ' (chrono)' : ''}
+                  {'  ·  '}BC {bcText} {bcModelText}
                   {'  ·  '}
                   {confirmedCount} confirmed
                 </Text>
@@ -293,9 +300,8 @@ export default function RangeCardScreen() {
                 <Text style={[styles.cell, styles.headerCell]}>ELEV {turretUnit}</Text>
                 <Text style={[styles.cell, styles.headerCell]}>W5</Text>
                 <Text style={[styles.cell, styles.headerCell]}>W10</Text>
-                <Text style={[styles.cell, styles.headerCell]}>
-                  {card?.preset === 'bench' ? 'FPS' : 'FT·LB'}
-                </Text>
+                <Text style={[styles.cell, styles.headerCell]}>FPS</Text>
+                <Text style={[styles.cell, styles.headerCell]}>BC</Text>
               </View>
 
               <ScrollView style={{ flex: 1 }}>
@@ -307,17 +313,11 @@ export default function RangeCardScreen() {
                   const machWord = subsonic ? ', subsonic' : transonic ? ', transonic' : '';
                   // Fade predictions in the transonic zone; confirmed holds stay lit.
                   const dimPred = transonic && !r.confirmed;
-                  const lastCol =
-                    card?.preset === 'bench'
-                      ? `${Math.round(r.velocityFps)} fps`
-                      : r.energyFtLb != null
-                        ? `${Math.round(r.energyFtLb)} foot pounds`
-                        : 'energy unknown';
                   return (
                     <View
                       key={r.distanceYd}
                       accessible={true}
-                      accessibilityLabel={`${dist} ${unitWord}, elevation ${formatHold(r.elevation, turretUnit)} ${turretUnit} ${r.confirmed ? 'confirmed' : 'predicted'}, wind ten ${formatHold(r.wind10Mph, turretUnit)}, ${lastCol}${machWord}`}
+                      accessibilityLabel={`${dist} ${unitWord}, elevation ${formatHold(r.elevation, turretUnit)} ${turretUnit} ${r.confirmed ? 'confirmed' : 'predicted'}, wind ten ${formatHold(r.wind10Mph, turretUnit)}, ${Math.round(r.velocityFps)} fps, BC ${bcText}${machWord}`}
                       style={[styles.row, r.confirmed && styles.confirmedRow, dimPred && styles.transonicRow]}
                     >
                       <Text style={[styles.cell, styles.distCell]}>
@@ -348,13 +348,8 @@ export default function RangeCardScreen() {
                       <Text style={[styles.cell, styles.dimText]}>
                         {formatHold(r.wind10Mph, turretUnit)}
                       </Text>
-                      <Text style={[styles.cell, styles.dimText]}>
-                        {card?.preset === 'bench'
-                          ? Math.round(r.velocityFps)
-                          : r.energyFtLb != null
-                            ? Math.round(r.energyFtLb)
-                            : '—'}
-                      </Text>
+                      <Text style={[styles.cell, styles.dimText]}>{Math.round(r.velocityFps)}</Text>
+                      <Text style={[styles.cell, styles.dimText]}>{bcText}</Text>
                     </View>
                   );
                 })}

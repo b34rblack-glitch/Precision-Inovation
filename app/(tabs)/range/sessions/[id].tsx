@@ -21,7 +21,14 @@ import {
   stringsForSessionQuery,
 } from '@/db/repositories/sessions';
 import { parseDecimal, parseVelocityList } from '@/lib/parse';
-import { distanceToYd, formatHold, TurretUnit, ydToDistance } from '@/lib/units';
+import {
+  distanceToYd,
+  formatHold,
+  inchesToMilAtRange,
+  inchesToMoaAtRange,
+  TurretUnit,
+  ydToDistance,
+} from '@/lib/units';
 import { colors, spacing, touchTarget, type } from '@/theme';
 
 export default function SessionDetailScreen() {
@@ -43,6 +50,8 @@ export default function SessionDetailScreen() {
   const [distanceError, setDistanceError] = useState<string | undefined>();
   const [elevation, setElevation] = useState('');
   const [windage, setWindage] = useState('');
+  // Holds entered either in the rifle's turret unit or in inches at the distance.
+  const [holdEntryUnit, setHoldEntryUnit] = useState<'MIL' | 'MOA' | 'in'>(turretUnit);
   const [groupSize, setGroupSize] = useState('');
   const [confirmed, setConfirmed] = useState<'Confirmed' | 'Provisional'>('Confirmed');
   const distanceRef = useRef<TextInput>(null);
@@ -101,11 +110,22 @@ export default function SessionDetailScreen() {
     savingDopeRef.current = true;
     setSavingDope(true);
     try {
+      const rangeYd = distanceToYd(d, distanceUnit);
+      // When entered in inches, convert the linear come-up at this distance to
+      // the rifle's dial unit so DOPE is always stored as a turret hold.
+      const toHold = (raw: string): number | null => {
+        const v = parseDecimal(raw);
+        if (v == null) return null;
+        if (holdEntryUnit !== 'in') return v;
+        return turretUnit === 'MIL'
+          ? inchesToMilAtRange(v, rangeYd)
+          : inchesToMoaAtRange(v, rangeYd);
+      };
       await addDopeEntry({
         sessionId: session.id,
-        distanceYd: distanceToYd(d, distanceUnit),
-        elevationHold: parseDecimal(elevation),
-        windageHold: parseDecimal(windage),
+        distanceYd: rangeYd,
+        elevationHold: toHold(elevation),
+        windageHold: toHold(windage),
         holdUnit: turretUnit,
         groupSizeIn: parseDecimal(groupSize),
         poiUpIn: null,
@@ -260,7 +280,7 @@ export default function SessionDetailScreen() {
                 label="Elevation"
                 value={elevation}
                 onChangeText={setElevation}
-                suffix={turretUnit}
+                suffix={holdEntryUnit}
                 signed
               />
             </Half>
@@ -271,7 +291,7 @@ export default function SessionDetailScreen() {
                 label="Windage"
                 value={windage}
                 onChangeText={setWindage}
-                suffix={turretUnit}
+                suffix={holdEntryUnit}
                 signed
               />
             </Half>
@@ -284,6 +304,17 @@ export default function SessionDetailScreen() {
               />
             </Half>
           </Row>
+          <Segmented
+            label="Enter holds in"
+            options={[turretUnit, 'in'] as const}
+            value={holdEntryUnit}
+            onChange={setHoldEntryUnit}
+          />
+          {holdEntryUnit === 'in' ? (
+            <Text style={[type.secondary, { marginTop: -spacing.sm, marginBottom: spacing.md, color: colors.textTertiary }]}>
+              Inches of come-up/correction at this distance — converted to {turretUnit} using the distance.
+            </Text>
+          ) : null}
           <Segmented
             label="Status"
             options={['Confirmed', 'Provisional'] as const}
