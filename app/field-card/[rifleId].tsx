@@ -6,7 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
 import { useRangeCard } from '@/features/rangecard/useRangeCard';
-import { formatHold, ydToDistance } from '@/lib/units';
+import { formatHold, holdToUnit, TurretUnit, ydToDistance } from '@/lib/units';
 import { colors } from '@/theme';
 
 // Field mode: the card you actually read from a shooting position. Max
@@ -16,15 +16,24 @@ export default function FieldCardScreen() {
   useKeepAwake();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { rifleId, loadVersionId } = useLocalSearchParams<{
+  const { rifleId, loadVersionId, holdUnit: holdUnitParam } = useLocalSearchParams<{
     rifleId: string;
     loadVersionId?: string;
+    holdUnit?: string;
   }>();
   const { data: rifleRows } = useLiveQuery(rifleByIdQuery(rifleId), [rifleId]);
   const rifle = rifleRows[0];
   const { rows, status } = useRangeCard(rifle, loadVersionId ?? null);
 
   if (!rifle) return <View style={styles.root} />;
+
+  // Rows come back in the rifle's turret unit; the card screen can override the
+  // display unit (reticle holdovers in mils on an MOA gun, say) and passes its
+  // choice through so field mode shows the same numbers.
+  const holdUnit: TurretUnit = holdUnitParam === 'MOA' || holdUnitParam === 'MIL'
+    ? holdUnitParam
+    : rifle.turretUnit;
+  const toHold = (v: number) => holdToUnit(v, rifle.turretUnit, holdUnit);
 
   const unitWord = rifle.distanceUnit === 'yd' ? 'yards' : 'meters';
   // DRIFT column (spin + Coriolis hold) renders only when the effect is
@@ -39,7 +48,7 @@ export default function FieldCardScreen() {
             {rifle.name.toUpperCase()}
           </Text>
           <Text style={styles.subtitle}>
-            {rifle.turretUnit} · W10 = full value 10 mph · screen stays awake
+            {holdUnit} · W10 = full value 10 mph · screen stays awake
           </Text>
           <Text style={styles.legend}>
             <Text style={{ color: colors.fieldText }}>●</Text> bright = confirmed · dim =
@@ -76,8 +85,8 @@ export default function FieldCardScreen() {
               const dimPred = transonic && !r.confirmed;
               // DRIFT is the HOLD for spin + Coriolis: driftIn > 0 = impact
               // drifts RIGHT → hold LEFT ('L'); negative → hold RIGHT ('R').
-              const driftVal = rifle.turretUnit === 'MIL' ? r.driftMil : r.driftMoa;
-              const driftHold = formatHold(Math.abs(driftVal), rifle.turretUnit);
+              const driftVal = holdUnit === 'MIL' ? r.driftMil : r.driftMoa;
+              const driftHold = formatHold(Math.abs(driftVal), holdUnit);
               const driftDir = r.driftIn > 0 ? 'L' : 'R';
               const driftWord = driftActive
                 ? `, drift hold ${driftHold} ${driftDir === 'L' ? 'left' : 'right'}`
@@ -86,7 +95,7 @@ export default function FieldCardScreen() {
                 <View
                   key={r.distanceYd}
                   accessible={true}
-                  accessibilityLabel={`${dist} ${unitWord}, hold ${formatHold(r.elevation, rifle.turretUnit)} ${rifle.turretUnit}, ${r.confirmed ? 'confirmed' : 'predicted'}, wind ten ${formatHold(r.wind10Mph, rifle.turretUnit)} ${rifle.turretUnit}${driftWord}${machWord}`}
+                  accessibilityLabel={`${dist} ${unitWord}, hold ${formatHold(toHold(r.elevation), holdUnit)} ${holdUnit}, ${r.confirmed ? 'confirmed' : 'predicted'}, wind ten ${formatHold(toHold(r.wind10Mph), holdUnit)} ${holdUnit}${driftWord}${machWord}`}
                   style={[styles.row, dimPred && styles.transonicRow]}
                 >
                   <Text style={styles.dist} maxFontSizeMultiplier={1.2}>
@@ -97,11 +106,11 @@ export default function FieldCardScreen() {
                     style={[styles.hold, !r.confirmed && styles.holdPred]}
                     maxFontSizeMultiplier={1.2}
                   >
-                    {formatHold(r.elevation, rifle.turretUnit)}
+                    {formatHold(toHold(r.elevation), holdUnit)}
                     <Text style={styles.marker}>{r.confirmed ? ' ●' : ''}</Text>
                   </Text>
                   <Text style={styles.wind} maxFontSizeMultiplier={1.2}>
-                    {formatHold(r.wind10Mph, rifle.turretUnit)}
+                    {formatHold(toHold(r.wind10Mph), holdUnit)}
                   </Text>
                   {driftActive ? (
                     <Text style={styles.drift} maxFontSizeMultiplier={1.2}>

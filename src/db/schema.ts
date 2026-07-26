@@ -22,6 +22,10 @@ export const rifles = sqliteTable('rifles', {
   cartridge: text('cartridge'),
   barrelLengthIn: real('barrel_length_in'),
   twistRate: text('twist_rate'),
+  // Spin drift and aerodynamic jump both flip sign with twist direction, so a
+  // left-hand barrel gets them backwards unless this is recorded. Almost every
+  // factory barrel is right-hand, hence the default.
+  twistRight: integer('twist_right', { mode: 'boolean' }).notNull().default(true),
   scopeMake: text('scope_make'),
   scopeModel: text('scope_model'),
   sightHeightIn: real('sight_height_in').notNull().default(1.9),

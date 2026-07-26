@@ -41,6 +41,9 @@ export default function NewSessionScreen() {
   const [altitudeFt, setAltitudeFt] = useState('');
   const [humidityPct, setHumidityPct] = useState('');
   const [windSpeedMph, setWindSpeedMph] = useState('');
+  // Clock position the wind blows FROM: 12 = headwind, 3 = from your right.
+  // Null means "not recorded" — the range card then treats it as 12 (no cross).
+  const [windDirClock, setWindDirClock] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -87,7 +90,7 @@ export default function NewSessionScreen() {
         altitudeFt: parseDecimal(altitudeFt),
         humidityPct: parseDecimal(humidityPct),
         windSpeedMph: parseDecimal(windSpeedMph),
-        windDirClock: null,
+        windDirClock,
         targetPhotoUri: null,
         notes: notes.trim() || null,
       });
@@ -168,6 +171,28 @@ export default function NewSessionScreen() {
           </Half>
         </Row>
         <NumericField label="Humidity" value={humidityPct} onChangeText={setHumidityPct} suffix="%" />
+
+        <Text style={[type.label, { marginBottom: spacing.xs }]}>Wind from (clock)</Text>
+        <View style={styles.chipWrap}>
+          <Chip
+            label="—"
+            selected={windDirClock === null}
+            onPress={() => setWindDirClock(null)}
+          />
+          {CLOCK_POSITIONS.map((c) => (
+            <Chip
+              key={c}
+              label={String(c)}
+              selected={windDirClock === c}
+              onPress={() => setWindDirClock(c)}
+            />
+          ))}
+        </View>
+        <Text style={[type.secondary, { marginTop: spacing.xs, marginBottom: spacing.md }]}>
+          The direction the wind blows FROM. 12 is straight down­range (headwind, no drift), 3 is
+          off your right, 9 off your left. Needed for the range card&apos;s W·LOG column.
+        </Text>
+
         <Field label="Notes" value={notes} onChangeText={setNotes} multiline />
       </CollapsibleSection>
 
@@ -181,6 +206,8 @@ export default function NewSessionScreen() {
     </Screen>
   );
 }
+
+const CLOCK_POSITIONS = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
 
 const styles = StyleSheet.create({
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

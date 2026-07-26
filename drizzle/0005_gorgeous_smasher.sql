@@ -1,0 +1,1 @@
+ALTER TABLE `rifles` ADD `twist_right` integer DEFAULT true NOT NULL;
