@@ -19,12 +19,14 @@ const obs = (
   elevationHold: number,
   recordedAt: Date,
   holdUnit: 'MIL' | 'MOA' = 'MIL',
+  createdAt?: Date,
 ): ObservedDope => ({
   distanceYd,
   elevationHold,
   windageHold: null,
   holdUnit,
   recordedAt,
+  createdAt,
 });
 
 describe('range card merge', () => {
@@ -94,6 +96,79 @@ describe('range card merge', () => {
     for (const r of rows) {
       expect(r.wind5Mph).toBeCloseTo(r.wind10Mph / 2, 10);
     }
+  });
+
+  it('an off-grid confirmed observation is appended as its own row, not snapped', () => {
+    // grid is 100..800 step 100; 570 is outside every row's ±2% window.
+    const rows = buildCardRows({
+      solverInput,
+      observations: [obs(570, 3.3, new Date('2026-07-01'))],
+      turretUnit: 'MIL',
+    });
+    // The nearest grid rows keep their prediction — nothing was snapped.
+    expect(rows.find((r) => r.distanceYd === 500)!.confirmed).toBe(false);
+    expect(rows.find((r) => r.distanceYd === 600)!.confirmed).toBe(false);
+    // A dedicated confirmed row appears at the exact observed distance.
+    const row570 = rows.find((r) => Math.abs(r.distanceYd - 570) < 1e-6);
+    expect(row570).toBeDefined();
+    expect(row570!.confirmed).toBe(true);
+    expect(row570!.elevation).toBe(3.3);
+    expect(row570!.predictedElevation).not.toBe(3.3);
+    // Predicted values are real solver output, incl. mach for the screens.
+    expect(row570!.mach).toBeGreaterThan(0);
+    expect(row570!.velocityFps).toBeGreaterThan(0);
+    // Rows stay sorted and 570 lands between 500 and 600.
+    const distances = rows.map((r) => r.distanceYd);
+    expect(distances).toEqual([...distances].sort((a, b) => a - b));
+    const idx = distances.indexOf(570);
+    expect(distances[idx - 1]).toBe(500);
+    expect(distances[idx + 1]).toBe(600);
+    expect(rows.filter((r) => r.confirmed)).toHaveLength(1);
+  });
+
+  it('collapses multiple confirmations of the same off-grid distance to the newest', () => {
+    const rows = buildCardRows({
+      solverInput,
+      observations: [
+        obs(570, 3.1, new Date('2026-05-01')),
+        obs(570, 3.4, new Date('2026-07-01')),
+      ],
+      turretUnit: 'MIL',
+    });
+    const row570 = rows.filter((r) => Math.abs(r.distanceYd - 570) < 1e-6);
+    expect(row570).toHaveLength(1);
+    expect(row570[0]!.elevation).toBe(3.4);
+  });
+
+  it('newest createdAt breaks a same-session (same date) tie', () => {
+    const sessionDate = new Date('2026-07-01');
+    const rows = buildCardRows({
+      solverInput,
+      observations: [
+        obs(600, 3.5, sessionDate, 'MIL', new Date('2026-07-01T10:00:00')),
+        obs(600, 3.9, sessionDate, 'MIL', new Date('2026-07-01T11:30:00')),
+      ],
+      turretUnit: 'MIL',
+    });
+    expect(rows.find((r) => r.distanceYd === 600)!.elevation).toBe(3.9);
+  });
+
+  it('threads the supplied atmosphere through to the solver', () => {
+    const thin = buildCardRows({
+      solverInput: { ...solverInput, atmo: { tempF: 95, pressureInHg: 24.9 } },
+      observations: [],
+      turretUnit: 'MIL',
+    });
+    const dense = buildCardRows({
+      solverInput: { ...solverInput, atmo: { tempF: 10, pressureInHg: 30.5 } },
+      observations: [],
+      turretUnit: 'MIL',
+    });
+    const thin800 = thin.find((r) => r.distanceYd === 800)!.predictedElevation;
+    const dense800 = dense.find((r) => r.distanceYd === 800)!.predictedElevation;
+    // Denser air = more drag = more drop = a bigger elevation hold.
+    expect(dense800).toBeGreaterThan(thin800);
+    expect(dense800).not.toBeCloseTo(thin800, 2);
   });
 });
 

@@ -9,7 +9,11 @@ import { CollapsibleSection, Field, Half, NumericField, Row, Segmented } from '@
 import { LoadComponentValues } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { Load, LoadVersion } from '@/db/schema';
+import { ListPickerModal } from '@/components/ListPickerModal';
+import { bestBc, CatalogBullet } from '@/data/bulletCatalog';
+import { BRASS_OPTIONS, POWDER_OPTIONS, PRIMER_OPTIONS } from '@/data/componentCatalog';
 import { parseDecimal } from '@/lib/parse';
+import { BulletCatalogModal } from '@/features/loads/BulletCatalogModal';
 import { colors, spacing, type } from '@/theme';
 
 export type LoadFormResult = {
@@ -58,6 +62,10 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
   const [notes, setNotes] = useState(initialVersion?.notes ?? '');
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [powderPickerOpen, setPowderPickerOpen] = useState(false);
+  const [primerPickerOpen, setPrimerPickerOpen] = useState(false);
+  const [brassPickerOpen, setBrassPickerOpen] = useState(false);
 
   const dirty =
     name !== (initialLoad?.name ?? '') ||
@@ -91,6 +99,20 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
   const clearError = (key: keyof Errors) =>
     setErrors((e) => (e[key] ? { ...e, [key]: undefined } : e));
 
+  // Catalog pick prefills the bullet's make/model/weight and its best BC
+  // (G7 preferred). Every field stays editable afterward.
+  const applyCatalogBullet = (bullet: CatalogBullet) => {
+    setBulletMake(bullet.maker);
+    setBulletModel(bullet.model);
+    setBulletWeight(bullet.weightGr.toString());
+    const bc = bestBc(bullet);
+    if (bc) {
+      setBcValue(bc.bcValue.toString());
+      setBcModel(bc.bcModel);
+    }
+    setErrors((e) => ({ ...e, bulletWeight: undefined, bcValue: undefined }));
+  };
+
   const submit = async () => {
     const errs: Errors = {};
     // Non-empty but unparseable numbers block submit; empty stays null.
@@ -103,6 +125,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
     if (name.trim() === '') errs.name = 'Name is required — everything else is optional.';
     const bulletWeightGr = num(bulletWeight, 'bulletWeight');
     const bc = num(bcValue, 'bcValue');
+    if (bc !== null && bc <= 0 && !errs.bcValue) errs.bcValue = 'BC must be greater than 0.';
     const charge = num(chargeGr, 'chargeGr');
     const firings = num(brassFirings, 'brassFirings');
     const cbtoIn = num(cbto, 'cbto');
@@ -170,6 +193,12 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       </View>
 
       <CollapsibleSection title="Bullet" initiallyOpen>
+        <Button
+          label="Choose from Catalog"
+          variant="secondary"
+          onPress={() => setCatalogOpen(true)}
+          style={{ marginBottom: spacing.md }}
+        />
         <Row>
           <Half>
             <Field label="Make" value={bulletMake} onChangeText={setBulletMake} placeholder="Hornady" />
@@ -208,6 +237,12 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       </CollapsibleSection>
 
       <CollapsibleSection title="Powder & primer" initiallyOpen>
+        <Button
+          label="Choose Powder"
+          variant="secondary"
+          onPress={() => setPowderPickerOpen(true)}
+          style={{ marginBottom: spacing.md }}
+        />
         <Row>
           <Half>
             <Field label="Powder" value={powderName} onChangeText={setPowderName} placeholder="H4350" />
@@ -226,9 +261,21 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           </Half>
         </Row>
         <Field label="Primer" value={primer} onChangeText={setPrimer} placeholder="CCI BR-2" />
+        <Button
+          label="Choose Primer"
+          variant="secondary"
+          onPress={() => setPrimerPickerOpen(true)}
+          style={{ marginTop: spacing.sm }}
+        />
       </CollapsibleSection>
 
       <CollapsibleSection title="Brass & seating">
+        <Button
+          label="Choose Brass"
+          variant="secondary"
+          onPress={() => setBrassPickerOpen(true)}
+          style={{ marginBottom: spacing.md }}
+        />
         <Row>
           <Half>
             <Field label="Brass" value={brass} onChangeText={setBrass} placeholder="Lapua" />
@@ -295,6 +342,37 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       </Text>
 
       <Button label={submitLabel} onPress={submit} loading={submitting} />
+
+      <BulletCatalogModal
+        visible={catalogOpen}
+        onClose={() => setCatalogOpen(false)}
+        onSelect={applyCatalogBullet}
+      />
+      <ListPickerModal
+        visible={powderPickerOpen}
+        title="Powders"
+        options={POWDER_OPTIONS}
+        placeholder="Search h4350, varget, RL16…"
+        footer="Product names only — enter your own worked-up charge weight. Always start from published load data and watch for pressure."
+        onClose={() => setPowderPickerOpen(false)}
+        onSelect={setPowderName}
+      />
+      <ListPickerModal
+        visible={primerPickerOpen}
+        title="Primers"
+        options={PRIMER_OPTIONS}
+        placeholder="Search CCI, 210M, magnum…"
+        onClose={() => setPrimerPickerOpen(false)}
+        onSelect={setPrimer}
+      />
+      <ListPickerModal
+        visible={brassPickerOpen}
+        title="Brass"
+        options={BRASS_OPTIONS}
+        placeholder="Search Lapua, Peterson…"
+        onClose={() => setBrassPickerOpen(false)}
+        onSelect={setBrass}
+      />
     </View>
   );
 }

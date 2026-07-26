@@ -21,7 +21,14 @@ import {
   stringsForSessionQuery,
 } from '@/db/repositories/sessions';
 import { parseDecimal, parseVelocityList } from '@/lib/parse';
-import { distanceToYd, formatHold, TurretUnit, ydToDistance } from '@/lib/units';
+import {
+  distanceToYd,
+  formatHold,
+  inchesToMilAtRange,
+  inchesToMoaAtRange,
+  TurretUnit,
+  ydToDistance,
+} from '@/lib/units';
 import { colors, spacing, touchTarget, type } from '@/theme';
 
 export default function SessionDetailScreen() {
@@ -43,9 +50,15 @@ export default function SessionDetailScreen() {
   const [distanceError, setDistanceError] = useState<string | undefined>();
   const [elevation, setElevation] = useState('');
   const [windage, setWindage] = useState('');
+  // Holds entered either in the rifle's turret unit or in inches at the distance.
+  const [holdEntryUnit, setHoldEntryUnit] = useState<'MIL' | 'MOA' | 'in'>(turretUnit);
   const [groupSize, setGroupSize] = useState('');
   const [confirmed, setConfirmed] = useState<'Confirmed' | 'Provisional'>('Confirmed');
   const distanceRef = useRef<TextInput>(null);
+  // Synchronous guard blocks a double-tap during the async insert (fields only
+  // clear after the await); `savingDope` mirrors it to disable/load the Button.
+  const savingDopeRef = useRef(false);
+  const [savingDope, setSavingDope] = useState(false);
 
   // --- chrono string entry ---
   const [showChronoForm, setShowChronoForm] = useState(false);
@@ -55,6 +68,8 @@ export default function SessionDetailScreen() {
   const [avg, setAvg] = useState('');
   const [sd, setSd] = useState('');
   const [es, setEs] = useState('');
+  const savingStringRef = useRef(false);
+  const [savingString, setSavingString] = useState(false);
 
   // --- which load this session was shot with ---
   const [loadLabel, setLoadLabel] = useState<string | null>(null);
@@ -86,17 +101,31 @@ export default function SessionDetailScreen() {
   if (!session) return <Screen underHeader>{null}</Screen>;
 
   const saveDope = async () => {
+    if (savingDopeRef.current) return;
     const d = parseDecimal(distance);
     if (d == null || d <= 0) {
       setDistanceError('Enter the distance you were shooting.');
       return;
     }
+    savingDopeRef.current = true;
+    setSavingDope(true);
     try {
+      const rangeYd = distanceToYd(d, distanceUnit);
+      // When entered in inches, convert the linear come-up at this distance to
+      // the rifle's dial unit so DOPE is always stored as a turret hold.
+      const toHold = (raw: string): number | null => {
+        const v = parseDecimal(raw);
+        if (v == null) return null;
+        if (holdEntryUnit !== 'in') return v;
+        return turretUnit === 'MIL'
+          ? inchesToMilAtRange(v, rangeYd)
+          : inchesToMoaAtRange(v, rangeYd);
+      };
       await addDopeEntry({
         sessionId: session.id,
-        distanceYd: distanceToYd(d, distanceUnit),
-        elevationHold: parseDecimal(elevation),
-        windageHold: parseDecimal(windage),
+        distanceYd: rangeYd,
+        elevationHold: toHold(elevation),
+        windageHold: toHold(windage),
         holdUnit: turretUnit,
         groupSizeIn: parseDecimal(groupSize),
         poiUpIn: null,
@@ -113,24 +142,32 @@ export default function SessionDetailScreen() {
       distanceRef.current?.focus();
     } catch (e) {
       Alert.alert('Could not save DOPE', e instanceof Error ? e.message : String(e));
+    } finally {
+      savingDopeRef.current = false;
+      setSavingDope(false);
     }
   };
 
   const parsedShots = parseVelocityList(shotsText);
 
   const saveString = async () => {
+    if (savingStringRef.current) return;
+    // Validate before arming the guard so an early return leaves the flag clear.
+    const isPerShot = chronoMode === 'Per-shot';
+    if (isPerShot && parsedShots.length === 0) {
+      setShotsError('No velocities recognized — separate shots with spaces or commas.');
+      return;
+    }
+    if (!isPerShot && parseDecimal(avg) == null) {
+      Alert.alert('Average required', 'Enter at least the average velocity.');
+      return;
+    }
+    savingStringRef.current = true;
+    setSavingString(true);
     try {
-      if (chronoMode === 'Per-shot') {
-        if (parsedShots.length === 0) {
-          setShotsError('No velocities recognized — separate shots with spaces or commas.');
-          return;
-        }
+      if (isPerShot) {
         await addShotString({ sessionId: session.id, velocitiesFps: parsedShots });
       } else {
-        if (parseDecimal(avg) == null) {
-          Alert.alert('Average required', 'Enter at least the average velocity.');
-          return;
-        }
         await addShotString({
           sessionId: session.id,
           summary: { avgFps: parseDecimal(avg), sdFps: parseDecimal(sd), esFps: parseDecimal(es) },
@@ -144,6 +181,9 @@ export default function SessionDetailScreen() {
       setShowChronoForm(false);
     } catch (e) {
       Alert.alert('Could not save string', e instanceof Error ? e.message : String(e));
+    } finally {
+      savingStringRef.current = false;
+      setSavingString(false);
     }
   };
 
@@ -240,7 +280,7 @@ export default function SessionDetailScreen() {
                 label="Elevation"
                 value={elevation}
                 onChangeText={setElevation}
-                suffix={turretUnit}
+                suffix={holdEntryUnit}
                 signed
               />
             </Half>
@@ -251,7 +291,7 @@ export default function SessionDetailScreen() {
                 label="Windage"
                 value={windage}
                 onChangeText={setWindage}
-                suffix={turretUnit}
+                suffix={holdEntryUnit}
                 signed
               />
             </Half>
@@ -265,13 +305,24 @@ export default function SessionDetailScreen() {
             </Half>
           </Row>
           <Segmented
+            label="Enter holds in"
+            options={[turretUnit, 'in'] as const}
+            value={holdEntryUnit}
+            onChange={setHoldEntryUnit}
+          />
+          {holdEntryUnit === 'in' ? (
+            <Text style={[type.secondary, { marginTop: -spacing.sm, marginBottom: spacing.md, color: colors.textTertiary }]}>
+              Inches of come-up/correction at this distance — converted to {turretUnit} using the distance.
+            </Text>
+          ) : null}
+          <Segmented
             label="Status"
             options={['Confirmed', 'Provisional'] as const}
             value={confirmed}
             onChange={setConfirmed}
           />
           <View style={styles.formActions}>
-            <Button label="Add DOPE" onPress={saveDope} style={{ flex: 1 }} />
+            <Button label="Add DOPE" onPress={saveDope} loading={savingDope} style={{ flex: 1 }} />
             <Pressable
               onPress={() => setShowDopeForm(false)}
               accessibilityRole="button"
@@ -290,29 +341,53 @@ export default function SessionDetailScreen() {
         </Text>
       ) : (
         dope.map((entry) => {
-          const distLabel = `${Math.round(ydToDistance(entry.distanceYd, distanceUnit))} ${distanceUnit}`;
+          const dist = Math.round(ydToDistance(entry.distanceYd, distanceUnit));
+          const distLabel = `${dist} ${distanceUnit}`;
+          const unitWord = distanceUnit === 'yd' ? 'yards' : 'meters';
+          // The ▲ / ◀▶ glyphs are decorative; spell out the reading for AT.
+          const a11yParts = [`${dist} ${unitWord}`];
+          if (entry.elevationHold != null) {
+            a11yParts.push(
+              `elevation ${formatHold(Math.abs(entry.elevationHold), turretUnit)} ${entry.elevationHold >= 0 ? 'up' : 'down'}`,
+            );
+          }
+          if (entry.windageHold != null) {
+            a11yParts.push(
+              `windage ${formatHold(Math.abs(entry.windageHold), turretUnit)} ${entry.windageHold >= 0 ? 'right' : 'left'}`,
+            );
+          }
+          if (entry.groupSizeIn != null) {
+            a11yParts.push(`group ${entry.groupSizeIn} inches`);
+          }
+          a11yParts.push(entry.confirmed ? 'confirmed' : 'provisional');
           return (
             <Card key={entry.id}>
               <View style={styles.dopeRow}>
-                <Text style={[type.heading, { fontVariant: ['tabular-nums'] }]}>{distLabel}</Text>
-                <View style={{ flex: 1, marginLeft: spacing.lg }}>
-                  <Text style={[type.body, { fontVariant: ['tabular-nums'] }]}>
-                    {entry.elevationHold != null
-                      ? `▲ ${formatHold(entry.elevationHold, turretUnit)}`
-                      : '—'}
-                    {entry.windageHold != null
-                      ? `   ◀▶ ${formatHold(entry.windageHold, turretUnit)}`
-                      : ''}
-                  </Text>
-                  {entry.groupSizeIn != null ? (
-                    <Text style={type.secondary}>{entry.groupSizeIn}" group</Text>
-                  ) : null}
+                <View
+                  style={styles.dopeInfo}
+                  accessible={true}
+                  accessibilityLabel={a11yParts.join(', ')}
+                >
+                  <Text style={[type.heading, { fontVariant: ['tabular-nums'] }]}>{distLabel}</Text>
+                  <View style={{ flex: 1, marginLeft: spacing.lg }}>
+                    <Text style={[type.body, { fontVariant: ['tabular-nums'] }]}>
+                      {entry.elevationHold != null
+                        ? `▲ ${formatHold(entry.elevationHold, turretUnit)}`
+                        : '—'}
+                      {entry.windageHold != null
+                        ? `   ◀▶ ${formatHold(entry.windageHold, turretUnit)}`
+                        : ''}
+                    </Text>
+                    {entry.groupSizeIn != null ? (
+                      <Text style={type.secondary}>{entry.groupSizeIn}" group</Text>
+                    ) : null}
+                  </View>
+                  {entry.confirmed ? (
+                    <Text style={[type.label, { color: colors.confirmed }]}>CONF</Text>
+                  ) : (
+                    <Text style={[type.label, { color: colors.predicted }]}>PROV</Text>
+                  )}
                 </View>
-                {entry.confirmed ? (
-                  <Text style={[type.label, { color: colors.confirmed }]}>CONF</Text>
-                ) : (
-                  <Text style={[type.label, { color: colors.predicted }]}>PROV</Text>
-                )}
                 <Pressable
                   onPress={() =>
                     Alert.alert('Delete entry?', '', [
@@ -396,7 +471,7 @@ export default function SessionDetailScreen() {
               </Row>
             </>
           )}
-          <Button label="Add String" onPress={saveString} />
+          <Button label="Add String" onPress={saveString} loading={savingString} />
         </Card>
       ) : null}
 
@@ -470,6 +545,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   dopeRow: { flexDirection: 'row', alignItems: 'center' },
+  dopeInfo: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   iconBtn: {
     width: touchTarget,
     height: touchTarget,

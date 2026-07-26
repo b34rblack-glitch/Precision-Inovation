@@ -13,6 +13,7 @@ import { Screen } from '@/components/Screen';
 import { activeLoadsQuery } from '@/db/repositories/loads';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
 import { useRangeCard } from '@/features/rangecard/useRangeCard';
+import { CardDistancesModal } from '@/features/rangecard/CardDistancesModal';
 import { rangeCardHtml } from '@/lib/rangecard/pdfHtml';
 import { formatHold, ydToDistance } from '@/lib/units';
 import { colors, radii, spacing, touchTarget, type } from '@/theme';
@@ -21,7 +22,7 @@ export default function RangeCardScreen() {
   const { rifleId, loadId } = useLocalSearchParams<{ rifleId: string; loadId?: string }>();
   const router = useRouter();
   const { data: rifleRows } = useLiveQuery(rifleByIdQuery(rifleId), [rifleId]);
-  const { data: allLoads } = useLiveQuery(activeLoadsQuery());
+  const { data: allLoads, updatedAt: loadsLoadedAt } = useLiveQuery(activeLoadsQuery());
   const rifle = rifleRows[0];
 
   const rifleLoads = useMemo(
@@ -34,8 +35,15 @@ export default function RangeCardScreen() {
     rifleLoads.find((l) => l.id === selectedLoadId) ?? rifleLoads[0] ?? null;
 
   const cardState = useRangeCard(rifle, activeLoad?.currentVersionId ?? null);
-  const { rows, status, errorMessage, missing, card, mvFps, mvSource, confirmedCount } = cardState;
+  const { rows, status, errorMessage, missing, card, version, mvFps, mvSource, confirmedCount } =
+    cardState;
+  // BC is constant for the whole card (the bullet's), shown on every row per request.
+  const bcText = version?.bcValue != null ? version.bcValue.toFixed(3) : '—';
+  const bcModelText = version?.bcModel ?? '';
   const [sharing, setSharing] = useState(false);
+  // Guards preset switches and true-up against double-tap stacking writes/alerts.
+  const [busy, setBusy] = useState(false);
+  const [distancesOpen, setDistancesOpen] = useState(false);
 
   if (!rifle) return <Screen scroll={false} underHeader>{null}</Screen>;
 
@@ -55,6 +63,8 @@ export default function RangeCardScreen() {
         turretUnit,
         distanceUnit,
         mvFps,
+        bcValue: version?.bcValue ?? null,
+        bcModel: version?.bcModel ?? null,
         zeroLabel: `${rifle.zeroDistance} ${distanceUnit}`,
         rows,
         generatedOn: new Date(),
@@ -71,6 +81,8 @@ export default function RangeCardScreen() {
   };
 
   const runTrueUp = async () => {
+    if (busy) return;
+    setBusy(true);
     try {
       const trued = await cardState.trueUp();
       if (trued == null) {
@@ -86,7 +98,20 @@ export default function RangeCardScreen() {
       }
     } catch (e) {
       Alert.alert('True-up failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
     }
+  };
+
+  const changePreset = (p: 'bench' | 'hunting') => {
+    if (busy || card?.preset === p) return;
+    setBusy(true);
+    cardState
+      .changePreset(p)
+      .catch((e: unknown) =>
+        Alert.alert('Could not switch preset', e instanceof Error ? e.message : String(e)),
+      )
+      .finally(() => setBusy(false));
   };
 
   const confirmReset = () => {
@@ -111,7 +136,12 @@ export default function RangeCardScreen() {
     <Screen scroll={false} underHeader>
       <Stack.Screen options={{ title: `${rifle.name} — Card` }} />
 
-      {rifleLoads.length === 0 ? (
+      {!loadsLoadedAt ? (
+        // Loads live query hasn't emitted yet — don't flash a false "no loads".
+        <View style={styles.loadingArea}>
+          <ActivityIndicator color={colors.accent} />
+        </View>
+      ) : rifleLoads.length === 0 ? (
         <View style={{ paddingHorizontal: spacing.lg }}>
           <EmptyState
             icon="grid-outline"
@@ -142,13 +172,10 @@ export default function RangeCardScreen() {
               {(['bench', 'hunting'] as const).map((p) => (
                 <Pressable
                   key={p}
-                  onPress={() =>
-                    cardState.changePreset(p).catch((e: unknown) =>
-                      Alert.alert('Could not switch preset', e instanceof Error ? e.message : String(e)),
-                    )
-                  }
+                  onPress={() => changePreset(p)}
+                  disabled={busy}
                   accessibilityRole="button"
-                  accessibilityState={{ selected: card?.preset === p }}
+                  accessibilityState={{ selected: card?.preset === p, disabled: busy }}
                   style={[styles.presetBtn, card?.preset === p && styles.presetBtnActive]}
                 >
                   <Text
@@ -162,7 +189,32 @@ export default function RangeCardScreen() {
                 </Pressable>
               ))}
             </View>
+
+            {card ? (
+              <Pressable
+                onPress={() => setDistancesOpen(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Edit card distances"
+                style={({ pressed }) => [styles.distancesRow, pressed && { opacity: 0.6 }]}
+              >
+                <Ionicons name="options-outline" size={18} color={colors.textSecondary} />
+                <Text style={[type.secondary, { flex: 1 }]}>
+                  {Math.round(ydToDistance(card.startDistanceYd, distanceUnit))}–
+                  {Math.round(ydToDistance(card.endDistanceYd, distanceUnit))} {distanceUnit} ·{' '}
+                  {Math.round(ydToDistance(card.incrementYd, distanceUnit))} {distanceUnit} steps
+                </Text>
+                <Text style={[type.secondary, { color: colors.accent, fontWeight: '700' }]}>
+                  Edit
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
+
+          {status === 'loading' ? (
+            <View style={styles.loadingArea}>
+              <ActivityIndicator color={colors.accent} />
+            </View>
+          ) : null}
 
           {status === 'error' ? (
             <Card style={{ marginHorizontal: spacing.lg }}>
@@ -207,14 +259,17 @@ export default function RangeCardScreen() {
                 <Text style={[type.secondary, { flex: 1 }]}>
                   MV {mvFps != null ? Math.round(mvFps) : '—'} fps
                   {mvSource === 'override' ? ' (trued)' : mvSource === 'measured' ? ' (chrono)' : ''}
+                  {'  ·  '}BC {bcText} {bcModelText}
                   {'  ·  '}
                   {confirmedCount} confirmed
                 </Text>
                 {mvSource === 'override' ? (
                   <Pressable
                     onPress={confirmReset}
+                    disabled={busy}
                     accessibilityRole="button"
                     accessibilityLabel="Reset trued muzzle velocity"
+                    accessibilityState={{ disabled: busy }}
                     style={styles.mvBtn}
                   >
                     <Text style={[type.secondary, { color: colors.danger, fontWeight: '700' }]}>
@@ -224,8 +279,10 @@ export default function RangeCardScreen() {
                 ) : (
                   <Pressable
                     onPress={runTrueUp}
+                    disabled={busy}
                     accessibilityRole="button"
                     accessibilityLabel="True up muzzle velocity from confirmed DOPE"
+                    accessibilityState={{ disabled: busy }}
                     style={styles.mvBtn}
                   >
                     <Text style={[type.secondary, { color: colors.accent, fontWeight: '700' }]}>
@@ -243,28 +300,30 @@ export default function RangeCardScreen() {
                 <Text style={[styles.cell, styles.headerCell]}>ELEV {turretUnit}</Text>
                 <Text style={[styles.cell, styles.headerCell]}>W5</Text>
                 <Text style={[styles.cell, styles.headerCell]}>W10</Text>
-                <Text style={[styles.cell, styles.headerCell]}>
-                  {card?.preset === 'bench' ? 'FPS' : 'FT·LB'}
-                </Text>
+                <Text style={[styles.cell, styles.headerCell]}>FPS</Text>
+                <Text style={[styles.cell, styles.headerCell]}>BC</Text>
               </View>
 
               <ScrollView style={{ flex: 1 }}>
                 {rows.map((r) => {
                   const dist = Math.round(ydToDistance(r.distanceYd, distanceUnit));
-                  const lastCol =
-                    card?.preset === 'bench'
-                      ? `${Math.round(r.velocityFps)} fps`
-                      : r.energyFtLb != null
-                        ? `${Math.round(r.energyFtLb)} foot pounds`
-                        : 'energy unknown';
+                  const subsonic = r.mach < 1.0;
+                  const transonic = r.mach < 1.2;
+                  const machMark = subsonic ? '‡‡' : transonic ? '‡' : '';
+                  const machWord = subsonic ? ', subsonic' : transonic ? ', transonic' : '';
+                  // Fade predictions in the transonic zone; confirmed holds stay lit.
+                  const dimPred = transonic && !r.confirmed;
                   return (
                     <View
                       key={r.distanceYd}
                       accessible={true}
-                      accessibilityLabel={`${dist} ${unitWord}, elevation ${formatHold(r.elevation, turretUnit)} ${turretUnit} ${r.confirmed ? 'confirmed' : 'predicted'}, wind ten ${formatHold(r.wind10Mph, turretUnit)}, ${lastCol}`}
-                      style={[styles.row, r.confirmed && styles.confirmedRow]}
+                      accessibilityLabel={`${dist} ${unitWord}, elevation ${formatHold(r.elevation, turretUnit)} ${turretUnit} ${r.confirmed ? 'confirmed' : 'predicted'}, wind ten ${formatHold(r.wind10Mph, turretUnit)}, ${Math.round(r.velocityFps)} fps, BC ${bcText}${machWord}`}
+                      style={[styles.row, r.confirmed && styles.confirmedRow, dimPred && styles.transonicRow]}
                     >
-                      <Text style={[styles.cell, styles.distCell]}>{dist}</Text>
+                      <Text style={[styles.cell, styles.distCell]}>
+                        {dist}
+                        {machMark ? <Text style={styles.machMark}>{` ${machMark}`}</Text> : null}
+                      </Text>
                       <View style={[styles.cell, { alignItems: 'flex-end' }]}>
                         <Text
                           style={[
@@ -289,16 +348,16 @@ export default function RangeCardScreen() {
                       <Text style={[styles.cell, styles.dimText]}>
                         {formatHold(r.wind10Mph, turretUnit)}
                       </Text>
-                      <Text style={[styles.cell, styles.dimText]}>
-                        {card?.preset === 'bench'
-                          ? Math.round(r.velocityFps)
-                          : r.energyFtLb != null
-                            ? Math.round(r.energyFtLb)
-                            : '—'}
-                      </Text>
+                      <Text style={[styles.cell, styles.dimText]}>{Math.round(r.velocityFps)}</Text>
+                      <Text style={[styles.cell, styles.dimText]}>{bcText}</Text>
                     </View>
                   );
                 })}
+                {rows.some((r) => r.mach < 1.2) ? (
+                  <Text style={styles.footnote}>
+                    {'‡ transonic (Mach < 1.2) · ‡‡ subsonic — predictions less reliable'}
+                  </Text>
+                ) : null}
                 <View style={{ height: spacing.xxl }} />
               </ScrollView>
 
@@ -334,6 +393,27 @@ export default function RangeCardScreen() {
               </View>
             </>
           ) : null}
+
+          {card ? (
+            <CardDistancesModal
+              visible={distancesOpen}
+              distanceUnit={distanceUnit}
+              startYd={card.startDistanceYd}
+              endYd={card.endDistanceYd}
+              incrementYd={card.incrementYd}
+              onClose={() => setDistancesOpen(false)}
+              onApply={(s, e, i) =>
+                cardState
+                  .changeDistances(s, e, i)
+                  .catch((err: unknown) =>
+                    Alert.alert(
+                      'Could not update distances',
+                      err instanceof Error ? err.message : String(err),
+                    ),
+                  )
+              }
+            />
+          ) : null}
         </>
       )}
     </Screen>
@@ -342,6 +422,13 @@ export default function RangeCardScreen() {
 
 const styles = StyleSheet.create({
   controls: { paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
+  distancesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
   presetRow: {
     flexDirection: 'row',
     marginTop: spacing.sm,
@@ -366,7 +453,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   mvBtn: {
-    minHeight: 44,
+    minHeight: touchTarget,
     paddingHorizontal: spacing.md,
     justifyContent: 'center',
     borderRadius: radii.md,
@@ -374,6 +461,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
   },
+  loadingArea: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -384,6 +472,14 @@ const styles = StyleSheet.create({
   },
   headerRow: { borderBottomWidth: 1.5, borderBottomColor: colors.textSecondary },
   confirmedRow: { backgroundColor: colors.surface },
+  transonicRow: { opacity: 0.6 },
+  machMark: { color: colors.textTertiary, fontSize: 12, fontWeight: '700' },
+  footnote: {
+    color: colors.textTertiary,
+    fontSize: 12,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
   cell: { flex: 1, textAlign: 'right', color: colors.text, fontVariant: ['tabular-nums'] },
   headerCell: {
     ...type.label,

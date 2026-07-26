@@ -27,18 +27,27 @@ export function Button({ label, onPress, variant = 'primary', disabled, loading,
           borderWidth: 1,
           borderColor: colors.border,
         },
-        variant === 'danger' && { backgroundColor: colors.danger, opacity: pressed ? 0.85 : 1 },
+        variant === 'danger' && { backgroundColor: colors.dangerFill, opacity: pressed ? 0.85 : 1 },
         disabled && { opacity: 0.4 },
         style,
       ]}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? colors.onAccent : colors.text} />
+        <ActivityIndicator
+          color={variant === 'primary' ? colors.onAccent : variant === 'danger' ? colors.onDanger : colors.text}
+        />
       ) : (
         <Text
           style={[
             styles.btnLabel,
-            { color: variant === 'primary' ? colors.onAccent : colors.text },
+            {
+              color:
+                variant === 'primary'
+                  ? colors.onAccent
+                  : variant === 'danger'
+                    ? colors.onDanger
+                    : colors.text,
+            },
           ]}
         >
           {label}

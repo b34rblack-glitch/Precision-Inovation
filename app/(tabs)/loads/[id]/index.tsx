@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Card } from '@/components/Card';
+import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
 import { archiveLoad, loadByIdQuery, versionsForLoadQuery } from '@/db/repositories/loads';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
@@ -59,13 +60,27 @@ const WORKUP_LABELS: Record<string, string> = {
 export default function LoadDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { data: loadRows } = useLiveQuery(loadByIdQuery(id), [id]);
+  const { data: loadRows, updatedAt } = useLiveQuery(loadByIdQuery(id), [id]);
   const { data: versions } = useLiveQuery(versionsForLoadQuery(id), [id]);
   const { data: loadWorkups } = useLiveQuery(workupsForLoadQuery(id), [id]);
   const assignedRifleId = loadRows[0]?.rifleId ?? '';
   const { data: rifleRows } = useLiveQuery(rifleByIdQuery(assignedRifleId), [assignedRifleId]);
   const load = loadRows[0];
-  if (!load) return <Screen underHeader>{null}</Screen>;
+  if (!load) {
+    // updatedAt is undefined until the live query's first emission — stay blank
+    // while loading; only after it emits with no row is this truly not found.
+    if (updatedAt === undefined) return <Screen underHeader>{null}</Screen>;
+    return (
+      <Screen underHeader>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Load not found"
+          message="This load may have been archived or deleted."
+          action={{ label: 'Back to Loads', onPress: () => router.replace('/loads') }}
+        />
+      </Screen>
+    );
+  }
   const current = versions.find((v) => v.id === load.currentVersionId) ?? versions[0];
   const assignedRifle = rifleRows[0];
 
@@ -209,7 +224,12 @@ export default function LoadDetailScreen() {
         </>
       ) : null}
 
-      <Pressable onPress={confirmArchive} style={styles.archiveBtn}>
+      <Pressable
+        onPress={confirmArchive}
+        style={styles.archiveBtn}
+        accessibilityRole="button"
+        accessibilityLabel="Archive load"
+      >
         <Text style={{ color: colors.danger, fontSize: 15, fontWeight: '600' }}>Archive load</Text>
       </Pressable>
     </Screen>

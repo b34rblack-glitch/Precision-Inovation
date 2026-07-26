@@ -1,11 +1,51 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getOrCreateCard, setCardMvOverride, setCardPreset } from '@/db/repositories/rangeCards';
+import {
+  getOrCreateCard,
+  setCardDistances,
+  setCardMvOverride,
+  setCardPreset,
+} from '@/db/repositories/rangeCards';
 import { getVersionById } from '@/db/repositories/loads';
-import { confirmedDopeForRifleLoad, latestMeasuredMv } from '@/db/repositories/sessions';
+import {
+  confirmedDopeForRifleLoad,
+  latestMeasuredMv,
+  latestSessionAtmo,
+} from '@/db/repositories/sessions';
 import { BallisticInput } from '@/lib/ballistics/types';
 import { buildCardRows, CardRow, ObservedDope, trueMuzzleVelocity } from '@/lib/rangecard/merge';
 import { CardPreset, presetConfig } from '@/lib/rangecard/presets';
 import { LoadVersion, RangeCard, Rifle } from '@/db/schema';
+
+// ICAO sea-level standard — the fallback atmosphere when a load has no logged
+// session conditions yet.
+const ICAO_ATMO = { tempF: 59, pressureInHg: 29.9213 } as const;
+
+type SessionAtmo = {
+  tempF: number | null;
+  pressureInHg: number | null;
+  altitudeFt: number | null;
+  humidityPct: number | null;
+};
+
+/**
+ * Solver atmosphere resolved from the latest logged session, with unset fields
+ * filled from ICAO sea-level. Altitude is preserved as a pressure source when
+ * no station pressure was recorded (computeAtmosphere prefers pressureInHg,
+ * then altitudeFt, then ICAO), so the default pressure is only substituted when
+ * the session gave neither.
+ */
+function resolveAtmo(sessionAtmo: SessionAtmo | null): BallisticInput['atmo'] {
+  if (!sessionAtmo) return { ...ICAO_ATMO };
+  const hasPressureSource =
+    sessionAtmo.pressureInHg != null || sessionAtmo.altitudeFt != null;
+  return {
+    tempF: sessionAtmo.tempF ?? ICAO_ATMO.tempF,
+    pressureInHg:
+      sessionAtmo.pressureInHg ?? (hasPressureSource ? null : ICAO_ATMO.pressureInHg),
+    altitudeFt: sessionAtmo.altitudeFt,
+    humidityPct: sessionAtmo.humidityPct,
+  };
+}
 
 export type RangeCardState = {
   status: 'loading' | 'missing-data' | 'ready' | 'error';
@@ -21,12 +61,15 @@ export type RangeCardState = {
   confirmedCount: number;
   refresh: () => void;
   changePreset: (p: CardPreset) => Promise<void>;
+  changeDistances: (startYd: number, endYd: number, incrementYd: number) => Promise<void>;
   trueUp: () => Promise<number | null>;
   clearTrueUp: () => Promise<void>;
 };
 
 export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | null): RangeCardState {
-  const [state, setState] = useState<Omit<RangeCardState, 'refresh' | 'changePreset' | 'trueUp' | 'clearTrueUp'>>({
+  const [state, setState] = useState<
+    Omit<RangeCardState, 'refresh' | 'changePreset' | 'changeDistances' | 'trueUp' | 'clearTrueUp'>
+  >({
     status: 'loading',
     errorMessage: null,
     missing: [],
@@ -54,13 +97,31 @@ export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | n
       confirmedCount: 0,
     }));
     (async () => {
-      if (!rifle || !loadVersionId) {
+      if (!rifle) {
+        // Rifle still resolving upstream — stay in the loading state.
         return;
       }
-      const [card, version, observedRaw] = await Promise.all([
+      if (!loadVersionId) {
+        // Terminal: a field card was opened without a load selected. Without
+        // this the hook would spin in 'loading' forever.
+        setState({
+          status: 'missing-data',
+          errorMessage: null,
+          missing: ['a selected load'],
+          card: null,
+          version: null,
+          rows: [],
+          mvSource: null,
+          mvFps: null,
+          confirmedCount: 0,
+        });
+        return;
+      }
+      const [card, version, observedRaw, sessionAtmo] = await Promise.all([
         getOrCreateCard(rifle.id, loadVersionId, rifle.distanceUnit),
         getVersionById(loadVersionId),
         confirmedDopeForRifleLoad(rifle.id, loadVersionId),
+        latestSessionAtmo(loadVersionId),
       ]);
       if (cancelled) return;
 
@@ -100,16 +161,36 @@ export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | n
         return;
       }
 
-      const atmo = (card.atmoSnapshot as BallisticInput['atmo'] | null) ?? {
-        tempF: 59,
-        pressureInHg: 29.9213,
-      };
+      const zeroDistanceYd =
+        rifle.distanceUnit === 'm' ? rifle.zeroDistance / 0.9144 : rifle.zeroDistance;
+      if (!(zeroDistanceYd > 0)) {
+        // A non-positive zero diverges the solver's zero-angle search — surface
+        // it rather than feeding garbage in.
+        setState({
+          status: 'error',
+          errorMessage:
+            'This rifle has an invalid zero distance. Set a zero greater than 0 to build a range card.',
+          missing: [],
+          card,
+          version,
+          rows: [],
+          mvSource,
+          mvFps,
+          confirmedCount: 0,
+        });
+        return;
+      }
+
+      // Resolve atmosphere at build time from the latest logged session for
+      // this load (do not persist a stale snapshot); ICAO if none exists.
+      const atmo = resolveAtmo(sessionAtmo);
       const observations: ObservedDope[] = observedRaw.map((o) => ({
         distanceYd: o.distanceYd,
         elevationHold: o.elevationHold,
         windageHold: o.windageHold,
         holdUnit: o.holdUnit,
         recordedAt: o.sessionDate,
+        createdAt: o.createdAt,
       }));
 
       const rows = buildCardRows({
@@ -117,8 +198,7 @@ export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | n
           mvFps: mvFps!,
           bc: version.bcValue!,
           bcModel: version.bcModel!,
-          zeroDistanceYd:
-            rifle.distanceUnit === 'm' ? rifle.zeroDistance / 0.9144 : rifle.zeroDistance,
+          zeroDistanceYd,
           sightHeightIn: rifle.sightHeightIn,
           atmo,
           maxDistanceYd: card.endDistanceYd,
@@ -166,18 +246,19 @@ export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | n
   const trueUp = useCallback(async (): Promise<number | null> => {
     if (!state.card || !state.version || !rifle || state.mvFps == null || !loadVersionId)
       return null;
-    const observedRaw = await confirmedDopeForRifleLoad(rifle.id, loadVersionId);
+    const [observedRaw, sessionAtmo] = await Promise.all([
+      confirmedDopeForRifleLoad(rifle.id, loadVersionId),
+      latestSessionAtmo(loadVersionId),
+    ]);
     const observations: ObservedDope[] = observedRaw.map((o) => ({
       distanceYd: o.distanceYd,
       elevationHold: o.elevationHold,
       windageHold: o.windageHold,
       holdUnit: o.holdUnit,
       recordedAt: o.sessionDate,
+      createdAt: o.createdAt,
     }));
-    const atmo = (state.card.atmoSnapshot as BallisticInput['atmo'] | null) ?? {
-      tempF: 59,
-      pressureInHg: 29.9213,
-    };
+    const atmo = resolveAtmo(sessionAtmo);
     const trued = trueMuzzleVelocity({
       solverInput: {
         mvFps: state.mvFps,
@@ -207,5 +288,15 @@ export function useRangeCard(rifle: Rifle | undefined, loadVersionId: string | n
     refresh();
   }, [state.card, refresh]);
 
-  return { ...state, refresh, changePreset, trueUp, clearTrueUp };
+  // Custom start/end/increment (canonical yards). Overrides the preset's grid.
+  const changeDistances = useCallback(
+    async (startYd: number, endYd: number, incrementYd: number) => {
+      if (!state.card) return;
+      await setCardDistances(state.card.id, startYd, endYd, incrementYd);
+      refresh();
+    },
+    [state.card, refresh],
+  );
+
+  return { ...state, refresh, changePreset, changeDistances, trueUp, clearTrueUp };
 }

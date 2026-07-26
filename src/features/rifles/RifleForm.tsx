@@ -7,6 +7,7 @@ import { Button } from '@/components/Buttons';
 import { CollapsibleSection, Field, Half, NumericField, Row, Segmented } from '@/components/Form';
 import { Rifle } from '@/db/schema';
 import { parseDecimal } from '@/lib/parse';
+import { mToYd, ydToM } from '@/lib/units';
 import { colors, radii, spacing, type } from '@/theme';
 
 // Only "name" is required — everything else is progressive disclosure.
@@ -86,11 +87,15 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
     setErrors((e) => (e[key] ? { ...e, [key]: undefined } : e));
 
   const pickPhoto = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      quality: 0.7,
-    });
-    if (!result.canceled && result.assets[0]) setPhotoUri(result.assets[0].uri);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+      if (!result.canceled && result.assets[0]) setPhotoUri(result.assets[0].uri);
+    } catch (e) {
+      Alert.alert('Could not open photos', e instanceof Error ? e.message : String(e));
+    }
   };
 
   const submit = async () => {
@@ -106,6 +111,11 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
     const barrelLengthIn = num(barrelLength, 'barrelLength');
     const sightHeightIn = num(sightHeight, 'sightHeight');
     const zeroDist = num(zeroDistance, 'zeroDistance');
+    // Lower-bound safety checks (only when the field parsed to a number).
+    if (zeroDist !== null && zeroDist <= 0 && !errs.zeroDistance)
+      errs.zeroDistance = 'Zero distance must be greater than 0.';
+    if (sightHeightIn !== null && sightHeightIn < 0 && !errs.sightHeight)
+      errs.sightHeight = 'Sight height cannot be negative.';
     if (Object.values(errs).some(Boolean)) {
       setErrors(errs);
       return;
@@ -171,7 +181,24 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
           <Segmented label="Turret units" options={['MIL', 'MOA'] as const} value={turretUnit} onChange={setTurretUnit} />
         </Half>
         <Half>
-          <Segmented label="Distances" options={['yd', 'm'] as const} value={distanceUnit} onChange={setDistanceUnit} />
+          <Segmented
+            label="Distances"
+            options={['yd', 'm'] as const}
+            value={distanceUnit}
+            onChange={(next) => {
+              // zeroDistance is stored in the display unit — convert the field so
+              // toggling yd/m preserves the physical zero (100 yd -> 91 m).
+              if (next !== distanceUnit) {
+                const current = parseDecimal(zeroDistance);
+                if (current !== null) {
+                  const converted = next === 'm' ? ydToM(current) : mToYd(current);
+                  setZeroDistance(String(Math.round(converted)));
+                  clearError('zeroDistance');
+                }
+              }
+              setDistanceUnit(next);
+            }}
+          />
         </Half>
       </Row>
 

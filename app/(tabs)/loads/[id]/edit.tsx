@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Alert } from 'react-native';
+import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
 import { loadByIdQuery, updateLoad, versionsForLoadQuery } from '@/db/repositories/loads';
 import { LoadForm } from '@/features/loads/LoadForm';
@@ -8,10 +9,22 @@ import { LoadForm } from '@/features/loads/LoadForm';
 export default function EditLoadScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { data: loadRows } = useLiveQuery(loadByIdQuery(id), [id]);
+  const { data: loadRows, updatedAt } = useLiveQuery(loadByIdQuery(id), [id]);
   const { data: versions } = useLiveQuery(versionsForLoadQuery(id), [id]);
   const load = loadRows[0];
-  if (!load) return <Screen underHeader>{null}</Screen>;
+  if (!load) {
+    if (updatedAt === undefined) return <Screen underHeader>{null}</Screen>;
+    return (
+      <Screen underHeader>
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Load not found"
+          message="This load may have been archived or deleted."
+          action={{ label: 'Back to Loads', onPress: () => router.replace('/loads') }}
+        />
+      </Screen>
+    );
+  }
   const currentVersion = versions.find((v) => v.id === load.currentVersionId) ?? versions[0];
 
   return (

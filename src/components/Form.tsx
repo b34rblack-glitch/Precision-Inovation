@@ -128,7 +128,10 @@ export function Segmented<T extends string>({ label, options, value, onChange }:
         {options.map((opt) => (
           <Pressable
             key={opt}
-            onPress={() => onChange(opt)}
+            onPress={() => {
+              if (opt !== value) Haptics.selectionAsync();
+              onChange(opt);
+            }}
             accessibilityRole="radio"
             accessibilityState={{ checked: value === opt }}
             style={({ pressed }) => [
@@ -314,7 +317,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: touchTarget - 2,
     color: colors.text,
-    fontSize: 17,
+    fontSize: 16,
     paddingVertical: spacing.sm,
   },
   multiline: { minHeight: 88, textAlignVertical: 'top' },
@@ -362,11 +365,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   stepperValue: {
+    ...type.statValue,
     textAlign: 'center',
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: '700',
-    fontVariant: ['tabular-nums'],
     paddingVertical: spacing.sm,
     minWidth: 80,
   },

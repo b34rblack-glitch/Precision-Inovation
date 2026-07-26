@@ -2,7 +2,8 @@ import { index, integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-or
 
 // Canonical storage units across the whole schema: grains, inches, fps, °F,
 // yards, inHg, feet. Conversion to a rifle's display units happens in the UI
-// layer via src/lib/units.ts.
+// layer via src/lib/units.ts. Exception: rifles.zeroDistance is stored in the
+// rifle's own display distance unit (yd or m), not canonical yards — see below.
 
 const id = () => text('id').primaryKey();
 const timestamps = {
@@ -26,6 +27,8 @@ export const rifles = sqliteTable('rifles', {
   sightHeightIn: real('sight_height_in').notNull().default(1.9),
   turretUnit: text('turret_unit', { enum: ['MIL', 'MOA'] }).notNull().default('MIL'),
   distanceUnit: text('distance_unit', { enum: ['yd', 'm'] }).notNull().default('yd'),
+  // Stored in the rifle's DISPLAY distance unit (yd or m), NOT canonical yards.
+  // Consumers needing yards convert m -> yd via /0.9144 (see src/lib/units.ts).
   zeroDistance: real('zero_distance').notNull().default(100),
   photoUri: text('photo_uri'),
   notes: text('notes'),
