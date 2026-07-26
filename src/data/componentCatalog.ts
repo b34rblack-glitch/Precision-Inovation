@@ -1,4 +1,4 @@
-import { PickerOption } from '@/components/ListPickerModal';
+import type { PickerOption } from '@/lib/pickerOption';
 
 // Reference pick-lists to speed load entry. These are PRODUCT NAMES ONLY —
 // deliberately NO powder charges, load recipes, or "start/max" data. Charge
