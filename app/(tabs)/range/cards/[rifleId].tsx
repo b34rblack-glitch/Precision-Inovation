@@ -15,7 +15,7 @@ import { rifleByIdQuery } from '@/db/repositories/rifles';
 import { useRangeCard } from '@/features/rangecard/useRangeCard';
 import { CardDistancesModal } from '@/features/rangecard/CardDistancesModal';
 import { rangeCardHtml } from '@/lib/rangecard/pdfHtml';
-import { formatHold, ydToDistance } from '@/lib/units';
+import { formatHold, holdToUnit, TurretUnit, ydToDistance } from '@/lib/units';
 import { colors, radii, spacing, touchTarget, type } from '@/theme';
 
 export default function RangeCardScreen() {
@@ -44,12 +44,18 @@ export default function RangeCardScreen() {
   // Guards preset switches and true-up against double-tap stacking writes/alerts.
   const [busy, setBusy] = useState(false);
   const [distancesOpen, setDistancesOpen] = useState(false);
+  // Which unit the hold columns display in. Null = the rifle's turret unit;
+  // switch to MIL for mil-dot reticle holdovers (or MOA) regardless of turret.
+  const [holdUnitOverride, setHoldUnitOverride] = useState<TurretUnit | null>(null);
 
   if (!rifle) return <Screen scroll={false} underHeader>{null}</Screen>;
 
   const loadLabel = activeLoad?.name ?? 'No load';
   const distanceUnit = rifle.distanceUnit;
   const turretUnit = rifle.turretUnit;
+  const holdUnit: TurretUnit = holdUnitOverride ?? turretUnit;
+  // Convert a hold value stored in the rifle's turret unit to the display unit.
+  const toHold = (v: number) => holdToUnit(v, turretUnit, holdUnit);
   const unitWord = distanceUnit === 'yd' ? 'yards' : 'meters';
 
   const sharePdf = async () => {
@@ -61,6 +67,7 @@ export default function RangeCardScreen() {
         loadLabel,
         preset: card?.preset ?? 'bench',
         turretUnit,
+        holdUnit,
         distanceUnit,
         mvFps,
         bcValue: version?.bcValue ?? null,
@@ -208,6 +215,29 @@ export default function RangeCardScreen() {
                 </Text>
               </Pressable>
             ) : null}
+
+            {/* Hold display unit — pick MIL for mil-dot reticle holdovers. */}
+            <View style={styles.holdUnitRow}>
+              <Text style={[type.secondary, { marginRight: spacing.sm }]}>Holds in</Text>
+              {(['MIL', 'MOA'] as const).map((u) => (
+                <Pressable
+                  key={u}
+                  onPress={() => setHoldUnitOverride(u)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: holdUnit === u }}
+                  style={[styles.holdUnitBtn, holdUnit === u && styles.holdUnitBtnActive]}
+                >
+                  <Text
+                    style={[
+                      styles.holdUnitLabel,
+                      holdUnit === u && { color: colors.onAccent },
+                    ]}
+                  >
+                    {u}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
 
           {status === 'loading' ? (
@@ -297,7 +327,7 @@ export default function RangeCardScreen() {
                 <Text style={[styles.cell, styles.headerCell, styles.distCell]}>
                   {distanceUnit.toUpperCase()}
                 </Text>
-                <Text style={[styles.cell, styles.headerCell]}>ELEV {turretUnit}</Text>
+                <Text style={[styles.cell, styles.headerCell]}>ELEV {holdUnit}</Text>
                 <Text style={[styles.cell, styles.headerCell]}>W5</Text>
                 <Text style={[styles.cell, styles.headerCell]}>W10</Text>
                 <Text style={[styles.cell, styles.headerCell]}>FPS</Text>
@@ -313,11 +343,13 @@ export default function RangeCardScreen() {
                   const machWord = subsonic ? ', subsonic' : transonic ? ', transonic' : '';
                   // Fade predictions in the transonic zone; confirmed holds stay lit.
                   const dimPred = transonic && !r.confirmed;
+                  const elevDisp = toHold(r.elevation);
+                  const predDisp = toHold(r.predictedElevation);
                   return (
                     <View
                       key={r.distanceYd}
                       accessible={true}
-                      accessibilityLabel={`${dist} ${unitWord}, elevation ${formatHold(r.elevation, turretUnit)} ${turretUnit} ${r.confirmed ? 'confirmed' : 'predicted'}, wind ten ${formatHold(r.wind10Mph, turretUnit)}, ${Math.round(r.velocityFps)} fps, BC ${bcText}${machWord}`}
+                      accessibilityLabel={`${dist} ${unitWord}, elevation ${formatHold(elevDisp, holdUnit)} ${holdUnit} ${r.confirmed ? 'confirmed' : 'predicted'}, wind ten ${formatHold(toHold(r.wind10Mph), holdUnit)}, ${Math.round(r.velocityFps)} fps, BC ${bcText}${machWord}`}
                       style={[styles.row, r.confirmed && styles.confirmedRow, dimPred && styles.transonicRow]}
                     >
                       <Text style={[styles.cell, styles.distCell]}>
@@ -331,22 +363,19 @@ export default function RangeCardScreen() {
                             r.confirmed && { color: colors.confirmed, fontWeight: '800' },
                           ]}
                         >
-                          {formatHold(r.elevation, turretUnit)}
+                          {formatHold(elevDisp, holdUnit)}
                           {r.confirmed ? ' ●' : ''}
                         </Text>
                         {r.confirmed &&
-                        Math.abs(r.elevation - r.predictedElevation) >
-                          (turretUnit === 'MIL' ? 0.05 : 0.15) ? (
-                          <Text style={styles.predSmall}>
-                            pred {formatHold(r.predictedElevation, turretUnit)}
-                          </Text>
+                        Math.abs(elevDisp - predDisp) > (holdUnit === 'MIL' ? 0.05 : 0.15) ? (
+                          <Text style={styles.predSmall}>pred {formatHold(predDisp, holdUnit)}</Text>
                         ) : null}
                       </View>
                       <Text style={[styles.cell, styles.dimText]}>
-                        {formatHold(r.wind5Mph, turretUnit)}
+                        {formatHold(toHold(r.wind5Mph), holdUnit)}
                       </Text>
                       <Text style={[styles.cell, styles.dimText]}>
-                        {formatHold(r.wind10Mph, turretUnit)}
+                        {formatHold(toHold(r.wind10Mph), holdUnit)}
                       </Text>
                       <Text style={[styles.cell, styles.dimText]}>{Math.round(r.velocityFps)}</Text>
                       <Text style={[styles.cell, styles.dimText]}>{bcText}</Text>
@@ -429,6 +458,19 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     paddingVertical: spacing.sm,
   },
+  holdUnitRow: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xs },
+  holdUnitBtn: {
+    minHeight: touchTarget - 8,
+    paddingHorizontal: spacing.lg,
+    justifyContent: 'center',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    marginRight: spacing.sm,
+  },
+  holdUnitBtnActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  holdUnitLabel: { color: colors.textSecondary, fontWeight: '700', fontSize: 14 },
   presetRow: {
     flexDirection: 'row',
     marginTop: spacing.sm,

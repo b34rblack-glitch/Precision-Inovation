@@ -23,6 +23,7 @@ describe('rangeCardHtml', () => {
     loadLabel: '140 ELD-M',
     preset: 'bench' as const,
     turretUnit: 'MIL' as const,
+    holdUnit: 'MIL' as const,
     distanceUnit: 'yd' as const,
     mvFps: 2710,
     bcValue: 0.326,
@@ -50,6 +51,18 @@ describe('rangeCardHtml', () => {
   it('shows BC in the meta header with its model', () => {
     const html = rangeCardHtml({ ...base, rows: [row({})] });
     expect(html).toMatch(/BC 0\.326 G7/);
+  });
+
+  it('converts holds to the chosen mil-dot display unit', () => {
+    // MOA-turret rifle, hold of 10 MOA at 600; displayed in MIL should be ~2.9.
+    const html = rangeCardHtml({
+      ...base,
+      turretUnit: 'MOA',
+      holdUnit: 'MIL',
+      rows: [row({ distanceYd: 600, elevation: 10 })],
+    });
+    expect(html).toContain('>Elev MIL<');
+    expect(html).toContain('>2.9<'); // 10 MOA -> 2.909 MIL, formatted to 1 dp
   });
 
   it('handles a null BC gracefully', () => {
