@@ -133,9 +133,9 @@ function solverExtras(
     version.bulletWeightGr > 0
       ? {
           twistInPerTurn,
-          // Twist direction isn't recorded on the rifle; right-hand twist is
-          // assumed (virtually all factory barrels are RH).
-          twistRight: true,
+          // Rifles saved before twist direction existed read back as null;
+          // right-hand is the safe default (virtually all factory barrels are RH).
+          twistRight: rifle.twistRight ?? true,
           bulletLengthIn: version.bulletLengthIn,
           bulletDiameterIn: version.bulletDiameterIn,
         }

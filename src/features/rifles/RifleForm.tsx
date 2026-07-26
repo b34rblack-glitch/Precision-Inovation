@@ -19,6 +19,7 @@ export type RifleFormValues = {
   cartridge: string | null;
   barrelLengthIn: number | null;
   twistRate: string | null;
+  twistRight: boolean;
   scopeMake: string | null;
   scopeModel: string | null;
   sightHeightIn: number;
@@ -47,6 +48,9 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
   const [cartridge, setCartridge] = useState(initial?.cartridge ?? '');
   const [barrelLength, setBarrelLength] = useState(initial?.barrelLengthIn?.toString() ?? '');
   const [twistRate, setTwistRate] = useState(initial?.twistRate ?? '');
+  const [twistDir, setTwistDir] = useState<'Right' | 'Left'>(
+    initial?.twistRight === false ? 'Left' : 'Right',
+  );
   const [scopeMake, setScopeMake] = useState(initial?.scopeMake ?? '');
   const [scopeModel, setScopeModel] = useState(initial?.scopeModel ?? '');
   const [sightHeight, setSightHeight] = useState(initial?.sightHeightIn?.toString() ?? '1.9');
@@ -65,6 +69,7 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
     cartridge !== (initial?.cartridge ?? '') ||
     barrelLength !== (initial?.barrelLengthIn?.toString() ?? '') ||
     twistRate !== (initial?.twistRate ?? '') ||
+    twistDir !== (initial?.twistRight === false ? 'Left' : 'Right') ||
     scopeMake !== (initial?.scopeMake ?? '') ||
     scopeModel !== (initial?.scopeModel ?? '') ||
     sightHeight !== (initial?.sightHeightIn?.toString() ?? '1.9') ||
@@ -130,6 +135,7 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
         cartridge: str(cartridge),
         barrelLengthIn,
         twistRate: str(twistRate),
+        twistRight: twistDir === 'Right',
         scopeMake: str(scopeMake),
         scopeModel: str(scopeModel),
         sightHeightIn: sightHeightIn ?? 1.9,
@@ -228,6 +234,16 @@ export function RifleForm({ initial, submitLabel, onSubmit }: Props) {
             <Field label="Twist rate" value={twistRate} onChangeText={setTwistRate} placeholder="1:8" />
           </Half>
         </Row>
+        <Segmented
+          label="Twist direction"
+          options={['Right', 'Left'] as const}
+          value={twistDir}
+          onChange={setTwistDir}
+        />
+        <Text style={type.secondary}>
+          Spin drift and aerodynamic jump push the opposite way out of a left-hand barrel. Nearly
+          all factory barrels are right-hand — leave this alone unless you know otherwise.
+        </Text>
       </CollapsibleSection>
 
       <CollapsibleSection title="Optic">

@@ -631,7 +631,9 @@ export default function RangeCardScreen() {
                   label="Field Mode"
                   onPress={() =>
                     router.push(
-                      `/field-card/${rifle.id}?loadVersionId=${activeLoad?.currentVersionId}`,
+                      // Carry the card's display unit through so field mode
+                      // shows the same holds the user just set up here.
+                      `/field-card/${rifle.id}?loadVersionId=${activeLoad?.currentVersionId}&holdUnit=${holdUnit}`,
                     )
                   }
                   style={{ flex: 1 }}
