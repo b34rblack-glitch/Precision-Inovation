@@ -1,6 +1,6 @@
 import { CardRow } from './merge';
 import { CardPreset } from './presets';
-import { DistanceUnit, formatHold, TurretUnit, ydToDistance } from '@/lib/units';
+import { DistanceUnit, formatHold, holdToUnit, TurretUnit, ydToDistance } from '@/lib/units';
 
 // Printable range card: monochrome, high contrast, sized for a stock pack or
 // wallet. Confirmed holds print bold with a filled marker so they read at a
@@ -10,7 +10,10 @@ export type PdfCardParams = {
   rifleName: string;
   loadLabel: string;
   preset: CardPreset;
+  /** Unit the stored holds are in (the rifle's turret unit). */
   turretUnit: TurretUnit;
+  /** Unit to DISPLAY holds in (MIL for mil-dot holdovers). */
+  holdUnit: TurretUnit;
   distanceUnit: DistanceUnit;
   mvFps: number;
   bcValue: number | null;
@@ -22,6 +25,7 @@ export type PdfCardParams = {
 
 export function rangeCardHtml(p: PdfCardParams): string {
   const bcText = p.bcValue != null ? p.bcValue.toFixed(3) : '—';
+  const h = (v: number) => formatHold(holdToUnit(v, p.turretUnit, p.holdUnit), p.holdUnit);
   const rowsHtml = p.rows
     .map((r) => {
       const dist = Math.round(ydToDistance(r.distanceYd, p.distanceUnit));
@@ -29,9 +33,9 @@ export function rangeCardHtml(p: PdfCardParams): string {
       const marker = r.confirmed ? '●' : '○';
       return `<tr class="${cls}">
         <td class="dist">${dist}</td>
-        <td class="hold">${formatHold(r.elevation, p.turretUnit)}</td>
-        <td>${formatHold(r.wind5Mph, p.turretUnit)}</td>
-        <td>${formatHold(r.wind10Mph, p.turretUnit)}</td>
+        <td class="hold">${h(r.elevation)}</td>
+        <td>${h(r.wind5Mph)}</td>
+        <td>${h(r.wind10Mph)}</td>
         <td>${Math.round(r.velocityFps)}</td>
         <td>${r.energyFtLb != null ? Math.round(r.energyFtLb) : '—'}</td>
         <td>${bcText}</td>
@@ -79,7 +83,7 @@ export function rangeCardHtml(p: PdfCardParams): string {
     <thead>
       <tr>
         <th>${p.distanceUnit}</th>
-        <th>Elev ${p.turretUnit}</th>
+        <th>Elev ${p.holdUnit}</th>
         <th>W5</th>
         <th>W10</th>
         <th>fps</th>
