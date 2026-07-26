@@ -11,9 +11,28 @@ import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { Load, LoadVersion } from '@/db/schema';
 import { ListPickerModal } from '@/components/ListPickerModal';
 import { bestBc, CatalogBullet } from '@/data/bulletCatalog';
-import { BRASS_OPTIONS, POWDER_OPTIONS, PRIMER_OPTIONS } from '@/data/componentCatalog';
+import {
+  BRASS_OPTIONS,
+  POWDER_OPTIONS,
+  PRESS_OPTIONS,
+  PRIMER_OPTIONS,
+  SEATING_DIE_OPTIONS,
+  SIZING_DIE_OPTIONS,
+} from '@/data/componentCatalog';
 import { parseDecimal } from '@/lib/parse';
 import { BulletCatalogModal } from '@/features/loads/BulletCatalogModal';
+import {
+  filledStageKeys,
+  fromYesNo,
+  SIZING_DIE_TYPE_CHOICES,
+  SizingDieTypeChoice,
+  sizingDieTypeToChoice,
+  sizingDieTypeToStored,
+  STAGE_TITLES,
+  toYesNo,
+  YES_NO,
+  YesNo,
+} from '@/features/loads/recipe';
 import { colors, spacing, type } from '@/theme';
 
 export type LoadFormResult = {
@@ -37,7 +56,20 @@ type Errors = Partial<
     | 'coal'
     | 'mv'
     | 'mvTempRef'
-    | 'mvTempSens',
+    | 'mvTempSens'
+    | 'caseTrimLength'
+    | 'neckWall'
+    | 'caseVolume'
+    | 'caseWeight'
+    | 'bushingSize'
+    | 'expanderMandrel'
+    | 'shoulderBump'
+    | 'primerSeatingDepth'
+    | 'chargeVariance'
+    | 'jumpToLands'
+    | 'neckTension'
+    | 'runout'
+    | 'loadedWeight',
     string
   >
 >;
@@ -96,12 +128,88 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
     initialVersion?.mvTempSensFpsPerDegF?.toString() ?? '',
   );
   const [notes, setNotes] = useState(initialVersion?.notes ?? '');
+
+  // 1 · Case prep
+  const [caseLot, setCaseLot] = useState(initialVersion?.caseLotNumber ?? '');
+  const [caseWeight, setCaseWeight] = useState(initialVersion?.caseWeightGr?.toString() ?? '');
+  const [caseVolume, setCaseVolume] = useState(initialVersion?.caseVolumeGrH2O?.toString() ?? '');
+  const [caseTrimLength, setCaseTrimLength] = useState(
+    initialVersion?.caseTrimLengthIn?.toString() ?? '',
+  );
+  const [caseTrimmedTo, setCaseTrimmedTo] = useState(initialVersion?.caseTrimmedTo ?? '');
+  const [neckTurned, setNeckTurned] = useState<YesNo>(toYesNo(initialVersion?.caseNeckTurned));
+  const [neckWall, setNeckWall] = useState(initialVersion?.neckWallThicknessIn?.toString() ?? '');
+  const [pocketUniformed, setPocketUniformed] = useState<YesNo>(
+    toYesNo(initialVersion?.primerPocketUniformed),
+  );
+  const [flashHoleDeburred, setFlashHoleDeburred] = useState<YesNo>(
+    toYesNo(initialVersion?.flashHoleDeburred),
+  );
+  const [annealed, setAnnealed] = useState<YesNo>(toYesNo(initialVersion?.caseAnnealed));
+  const [annealMethod, setAnnealMethod] = useState(initialVersion?.annealMethod ?? '');
+  const [casePrepNotes, setCasePrepNotes] = useState(initialVersion?.casePrepNotes ?? '');
+
+  // 2 · Sizing & dies
+  const [sizingDie, setSizingDie] = useState(initialVersion?.sizingDie ?? '');
+  const [sizingDieType, setSizingDieType] = useState<SizingDieTypeChoice>(
+    sizingDieTypeToChoice(initialVersion?.sizingDieType),
+  );
+  const [bushingSize, setBushingSize] = useState(initialVersion?.bushingSizeIn?.toString() ?? '');
+  const [expanderMandrel, setExpanderMandrel] = useState(
+    initialVersion?.expanderMandrelIn?.toString() ?? '',
+  );
+  const [shoulderBump, setShoulderBump] = useState(initialVersion?.shoulderBumpIn?.toString() ?? '');
+  const [lubeMethod, setLubeMethod] = useState(initialVersion?.lubeMethod ?? '');
+  const [pressName, setPressName] = useState(initialVersion?.pressName ?? '');
+
+  // 3 · Priming
+  const [primerLot, setPrimerLot] = useState(initialVersion?.primerLotNumber ?? '');
+  const [primerSeatingDepth, setPrimerSeatingDepth] = useState(
+    initialVersion?.primerSeatingDepthIn?.toString() ?? '',
+  );
+
+  // 4 · Charging
+  const [powderLot, setPowderLot] = useState(initialVersion?.powderLotNumber ?? '');
+  const [chargeMethod, setChargeMethod] = useState(initialVersion?.chargeMethod ?? '');
+  const [chargeVariance, setChargeVariance] = useState(
+    initialVersion?.chargeVarianceGr?.toString() ?? '',
+  );
+
+  // 5 · Seating
+  const [seatingDie, setSeatingDie] = useState(initialVersion?.seatingDie ?? '');
+  const [seatingMicrometer, setSeatingMicrometer] = useState(
+    initialVersion?.seatingDieMicrometer ?? '',
+  );
+  const [jumpToLands, setJumpToLands] = useState(initialVersion?.jumpToLandsIn?.toString() ?? '');
+  const [neckTension, setNeckTension] = useState(initialVersion?.neckTensionIn?.toString() ?? '');
+  const [crimpDie, setCrimpDie] = useState(initialVersion?.crimpDie ?? '');
+  const [bulletLot, setBulletLot] = useState(initialVersion?.bulletLotNumber ?? '');
+  const [bulletSortedBy, setBulletSortedBy] = useState(initialVersion?.bulletSortedBy ?? '');
+
+  // 6 · QC & results
+  const [runout, setRunout] = useState(initialVersion?.runoutIn?.toString() ?? '');
+  const [loadedWeight, setLoadedWeight] = useState(
+    initialVersion?.loadedRoundWeightGr?.toString() ?? '',
+  );
+  const [assemblyNotes, setAssemblyNotes] = useState(initialVersion?.assemblyNotes ?? '');
+
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [powderPickerOpen, setPowderPickerOpen] = useState(false);
   const [primerPickerOpen, setPrimerPickerOpen] = useState(false);
   const [brassPickerOpen, setBrassPickerOpen] = useState(false);
+  const [sizingDiePickerOpen, setSizingDiePickerOpen] = useState(false);
+  const [seatingDiePickerOpen, setSeatingDiePickerOpen] = useState(false);
+  const [pressPickerOpen, setPressPickerOpen] = useState(false);
+
+  // A stage that already holds data opens on mount, so editing an existing
+  // recipe never hides what was recorded behind a collapsed header.
+  const [filledStages] = useState(() => filledStageKeys(initialVersion));
+  const bulletDetailFilled =
+    initialVersion?.bulletLengthIn != null ||
+    initialVersion?.bulletDiameterIn != null ||
+    (initialVersion?.bcSegments?.length ?? 0) > 0;
 
   const dirty =
     name !== (initialLoad?.name ?? '') ||
@@ -126,7 +234,41 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
     mv !== (initialVersion?.muzzleVelocityFps?.toString() ?? '') ||
     mvTempRef !== (initialVersion?.mvTempRefF?.toString() ?? '') ||
     mvTempSens !== (initialVersion?.mvTempSensFpsPerDegF?.toString() ?? '') ||
-    notes !== (initialVersion?.notes ?? '');
+    notes !== (initialVersion?.notes ?? '') ||
+    caseLot !== (initialVersion?.caseLotNumber ?? '') ||
+    caseWeight !== (initialVersion?.caseWeightGr?.toString() ?? '') ||
+    caseVolume !== (initialVersion?.caseVolumeGrH2O?.toString() ?? '') ||
+    caseTrimLength !== (initialVersion?.caseTrimLengthIn?.toString() ?? '') ||
+    caseTrimmedTo !== (initialVersion?.caseTrimmedTo ?? '') ||
+    neckTurned !== toYesNo(initialVersion?.caseNeckTurned) ||
+    neckWall !== (initialVersion?.neckWallThicknessIn?.toString() ?? '') ||
+    pocketUniformed !== toYesNo(initialVersion?.primerPocketUniformed) ||
+    flashHoleDeburred !== toYesNo(initialVersion?.flashHoleDeburred) ||
+    annealed !== toYesNo(initialVersion?.caseAnnealed) ||
+    annealMethod !== (initialVersion?.annealMethod ?? '') ||
+    casePrepNotes !== (initialVersion?.casePrepNotes ?? '') ||
+    sizingDie !== (initialVersion?.sizingDie ?? '') ||
+    sizingDieType !== sizingDieTypeToChoice(initialVersion?.sizingDieType) ||
+    bushingSize !== (initialVersion?.bushingSizeIn?.toString() ?? '') ||
+    expanderMandrel !== (initialVersion?.expanderMandrelIn?.toString() ?? '') ||
+    shoulderBump !== (initialVersion?.shoulderBumpIn?.toString() ?? '') ||
+    lubeMethod !== (initialVersion?.lubeMethod ?? '') ||
+    pressName !== (initialVersion?.pressName ?? '') ||
+    primerLot !== (initialVersion?.primerLotNumber ?? '') ||
+    primerSeatingDepth !== (initialVersion?.primerSeatingDepthIn?.toString() ?? '') ||
+    powderLot !== (initialVersion?.powderLotNumber ?? '') ||
+    chargeMethod !== (initialVersion?.chargeMethod ?? '') ||
+    chargeVariance !== (initialVersion?.chargeVarianceGr?.toString() ?? '') ||
+    seatingDie !== (initialVersion?.seatingDie ?? '') ||
+    seatingMicrometer !== (initialVersion?.seatingDieMicrometer ?? '') ||
+    jumpToLands !== (initialVersion?.jumpToLandsIn?.toString() ?? '') ||
+    neckTension !== (initialVersion?.neckTensionIn?.toString() ?? '') ||
+    crimpDie !== (initialVersion?.crimpDie ?? '') ||
+    bulletLot !== (initialVersion?.bulletLotNumber ?? '') ||
+    bulletSortedBy !== (initialVersion?.bulletSortedBy ?? '') ||
+    runout !== (initialVersion?.runoutIn?.toString() ?? '') ||
+    loadedWeight !== (initialVersion?.loadedRoundWeightGr?.toString() ?? '') ||
+    assemblyNotes !== (initialVersion?.assemblyNotes ?? '');
 
   // While submitting the guard is down so the post-save navigation goes through;
   // a failed save re-arms it (submitting resets to false).
@@ -170,6 +312,18 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       if (n === null) errs[key] = 'Enter a number like 41.5';
       return n;
     };
+    // A physical dimension that can't be zero or negative (a thickness, a weight).
+    const numPos = (value: string, key: keyof Errors, label: string): number | null => {
+      const n = num(value, key);
+      if (n !== null && n <= 0 && !errs[key]) errs[key] = `${label} must be greater than 0.`;
+      return n;
+    };
+    // Zero is meaningful (no bump, perfect runout, flush primer) but negative isn't.
+    const numNonNeg = (value: string, key: keyof Errors, label: string): number | null => {
+      const n = num(value, key);
+      if (n !== null && n < 0 && !errs[key]) errs[key] = `${label} can't be negative.`;
+      return n;
+    };
     if (name.trim() === '') errs.name = 'Name is required — everything else is optional.';
     const bulletWeightGr = num(bulletWeight, 'bulletWeight');
     const bc = num(bcValue, 'bcValue');
@@ -187,6 +341,28 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
     const muzzleVelocityFps = num(mv, 'mv');
     const mvTempRefF = num(mvTempRef, 'mvTempRef');
     const mvTempSensFpsPerDegF = num(mvTempSens, 'mvTempSens');
+    // Case prep
+    const caseWeightGr = numPos(caseWeight, 'caseWeight', 'Case weight');
+    const caseVolumeGrH2O = numPos(caseVolume, 'caseVolume', 'Case volume');
+    const caseTrimLengthIn = numPos(caseTrimLength, 'caseTrimLength', 'Trim length');
+    const neckWallThicknessIn = numPos(neckWall, 'neckWall', 'Neck wall thickness');
+    // Sizing & dies
+    const bushingSizeIn = numPos(bushingSize, 'bushingSize', 'Bushing size');
+    const expanderMandrelIn = numPos(expanderMandrel, 'expanderMandrel', 'Mandrel diameter');
+    const shoulderBumpIn = numNonNeg(shoulderBump, 'shoulderBump', 'Shoulder bump');
+    // Priming & charging
+    const primerSeatingDepthIn = numNonNeg(
+      primerSeatingDepth,
+      'primerSeatingDepth',
+      'Primer seating depth',
+    );
+    const chargeVarianceGr = numNonNeg(chargeVariance, 'chargeVariance', 'Charge tolerance');
+    // Seating — jump is signed: negative means the bullet is jammed into the lands.
+    const jumpToLandsIn = num(jumpToLands, 'jumpToLands');
+    const neckTensionIn = numPos(neckTension, 'neckTension', 'Neck tension');
+    // QC
+    const runoutIn = numNonNeg(runout, 'runout', 'Runout');
+    const loadedRoundWeightGr = numPos(loadedWeight, 'loadedWeight', 'Loaded round weight');
     // BC bands: a row counts only when BOTH halves are present and valid; a
     // half-filled or garbage row blocks submit instead of being dropped.
     const segments: { minVelocityFps: number; bc: number }[] = [];
@@ -230,6 +406,40 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           mvTempRefF,
           mvTempSensFpsPerDegF,
           notes: str(notes),
+          caseLotNumber: str(caseLot),
+          caseWeightGr,
+          caseVolumeGrH2O,
+          caseTrimLengthIn,
+          caseTrimmedTo: str(caseTrimmedTo),
+          caseNeckTurned: fromYesNo(neckTurned),
+          neckWallThicknessIn,
+          primerPocketUniformed: fromYesNo(pocketUniformed),
+          flashHoleDeburred: fromYesNo(flashHoleDeburred),
+          caseAnnealed: fromYesNo(annealed),
+          annealMethod: str(annealMethod),
+          casePrepNotes: str(casePrepNotes),
+          sizingDie: str(sizingDie),
+          sizingDieType: sizingDieTypeToStored(sizingDieType),
+          bushingSizeIn,
+          expanderMandrelIn,
+          shoulderBumpIn,
+          lubeMethod: str(lubeMethod),
+          pressName: str(pressName),
+          primerLotNumber: str(primerLot),
+          primerSeatingDepthIn,
+          powderLotNumber: str(powderLot),
+          chargeMethod: str(chargeMethod),
+          chargeVarianceGr,
+          seatingDie: str(seatingDie),
+          seatingDieMicrometer: str(seatingMicrometer),
+          jumpToLandsIn,
+          neckTensionIn,
+          crimpDie: str(crimpDie),
+          bulletLotNumber: str(bulletLot),
+          bulletSortedBy: str(bulletSortedBy),
+          runoutIn,
+          loadedRoundWeightGr,
+          assemblyNotes: str(assemblyNotes),
         },
       });
     } finally {
@@ -239,6 +449,9 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
 
   return (
     <View>
+      <Text style={[type.secondary, styles.formHint]}>
+        Only Name is required — fill in as much or as little of the rest as you track.
+      </Text>
       <Field
         label="Name *"
         value={name}
@@ -266,7 +479,10 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         )}
       </View>
 
-      <CollapsibleSection title="Bullet" initiallyOpen>
+      <CollapsibleSection title="Ingredients" initiallyOpen>
+        <Text style={[type.secondary, styles.sectionHint]}>
+          What goes in the round. The numbered steps below record how you put it together.
+        </Text>
         <Button
           label="Choose from Catalog"
           variant="secondary"
@@ -275,10 +491,10 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         />
         <Row>
           <Half>
-            <Field label="Make" value={bulletMake} onChangeText={setBulletMake} placeholder="Hornady" />
+            <Field label="Bullet make" value={bulletMake} onChangeText={setBulletMake} placeholder="Hornady" />
           </Half>
           <Half>
-            <Field label="Model" value={bulletModel} onChangeText={setBulletModel} placeholder="ELD-M" />
+            <Field label="Bullet model" value={bulletModel} onChangeText={setBulletModel} placeholder="ELD-M" />
           </Half>
         </Row>
         <Row>
@@ -296,7 +512,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           </Half>
           <Half>
             <NumericField
-              label="BC"
+              label="BC (for range cards)"
               value={bcValue}
               onChangeText={(v) => {
                 setBcValue(v);
@@ -308,6 +524,60 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           </Half>
         </Row>
         <Segmented label="BC model" options={['G7', 'G1'] as const} value={bcModel} onChange={setBcModel} />
+        <Button
+          label="Choose Powder"
+          variant="secondary"
+          onPress={() => setPowderPickerOpen(true)}
+          style={{ marginBottom: spacing.md }}
+        />
+        <Row>
+          <Half>
+            <Field label="Powder" value={powderName} onChangeText={setPowderName} placeholder="H4350" />
+          </Half>
+          <Half>
+            <NumericField
+              label="Charge"
+              value={chargeGr}
+              onChangeText={(v) => {
+                setChargeGr(v);
+                clearError('chargeGr');
+              }}
+              suffix="gr"
+              error={errors.chargeGr}
+            />
+          </Half>
+        </Row>
+        <Field label="Primer" value={primer} onChangeText={setPrimer} placeholder="CCI BR-2" />
+        <Button
+          label="Choose Primer"
+          variant="secondary"
+          onPress={() => setPrimerPickerOpen(true)}
+          style={{ marginBottom: spacing.lg }}
+        />
+        <Row>
+          <Half>
+            <Field label="Brass" value={brass} onChangeText={setBrass} placeholder="Lapua" />
+          </Half>
+          <Half>
+            <NumericField
+              label="Firings"
+              value={brassFirings}
+              onChangeText={(v) => {
+                setBrassFirings(v);
+                clearError('brassFirings');
+              }}
+              integer
+              error={errors.brassFirings}
+            />
+          </Half>
+        </Row>
+        <Button label="Choose Brass" variant="secondary" onPress={() => setBrassPickerOpen(true)} />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="Bullet ballistics detail" initiallyOpen={bulletDetailFilled}>
+        <Text style={[type.secondary, styles.sectionHint]}>
+          Length + diameter enable the spin-drift estimate on range cards.
+        </Text>
         <Row>
           <Half>
             <NumericField
@@ -337,14 +607,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           </Half>
         </Row>
         <Text style={[type.secondary, styles.sectionHint]}>
-          Length + diameter enable the spin-drift estimate on range cards.
-        </Text>
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Velocity-banded BC (advanced)">
-        <Text style={[type.secondary, styles.sectionHint]}>
-          Sierra-style bands: each BC applies at or above its min velocity. Leave empty to use
-          the single BC above everywhere.
+          Velocity-banded BC (Sierra-style): each BC applies at or above its min velocity. Leave
+          empty to use the single BC above everywhere.
         </Text>
         {bcSegs.map((seg, i) => (
           <Row key={i}>
@@ -373,63 +637,265 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         ) : null}
       </CollapsibleSection>
 
-      <CollapsibleSection title="Powder & primer" initiallyOpen>
-        <Button
-          label="Choose Powder"
-          variant="secondary"
-          onPress={() => setPowderPickerOpen(true)}
-          style={{ marginBottom: spacing.md }}
-        />
+      <CollapsibleSection title={STAGE_TITLES.casePrep} initiallyOpen={filledStages.has('casePrep')}>
         <Row>
           <Half>
-            <Field label="Powder" value={powderName} onChangeText={setPowderName} placeholder="H4350" />
+            <Field label="Case lot #" value={caseLot} onChangeText={setCaseLot} placeholder="Lot 4823" />
           </Half>
           <Half>
             <NumericField
-              label="Charge"
-              value={chargeGr}
+              label="Case weight"
+              value={caseWeight}
               onChangeText={(v) => {
-                setChargeGr(v);
-                clearError('chargeGr');
+                setCaseWeight(v);
+                clearError('caseWeight');
               }}
               suffix="gr"
-              error={errors.chargeGr}
+              error={errors.caseWeight}
             />
           </Half>
         </Row>
-        <Field label="Primer" value={primer} onChangeText={setPrimer} placeholder="CCI BR-2" />
-        <Button
-          label="Choose Primer"
-          variant="secondary"
-          onPress={() => setPrimerPickerOpen(true)}
-          style={{ marginTop: spacing.sm }}
+        <Row>
+          <Half>
+            <NumericField
+              label="Case volume"
+              value={caseVolume}
+              onChangeText={(v) => {
+                setCaseVolume(v);
+                clearError('caseVolume');
+              }}
+              suffix="gr H₂O"
+              error={errors.caseVolume}
+            />
+          </Half>
+          <Half>
+            <NumericField
+              label="Trim length"
+              value={caseTrimLength}
+              onChangeText={(v) => {
+                setCaseTrimLength(v);
+                clearError('caseTrimLength');
+              }}
+              suffix="in"
+              placeholder="1.910"
+              error={errors.caseTrimLength}
+            />
+          </Half>
+        </Row>
+        <Field
+          label="Trimmed with"
+          value={caseTrimmedTo}
+          onChangeText={setCaseTrimmedTo}
+          placeholder="Giraud"
+          autoCapitalize="words"
+        />
+        <Row>
+          <Half>
+            <Segmented label="Neck turned" options={YES_NO} value={neckTurned} onChange={setNeckTurned} />
+          </Half>
+          <Half>
+            <NumericField
+              label="Neck wall"
+              value={neckWall}
+              onChangeText={(v) => {
+                setNeckWall(v);
+                clearError('neckWall');
+              }}
+              suffix="in"
+              placeholder="0.0135"
+              error={errors.neckWall}
+            />
+          </Half>
+        </Row>
+        <Row>
+          <Half>
+            <Segmented
+              label="Pocket uniformed"
+              options={YES_NO}
+              value={pocketUniformed}
+              onChange={setPocketUniformed}
+            />
+          </Half>
+          <Half>
+            <Segmented
+              label="Flash hole deburred"
+              options={YES_NO}
+              value={flashHoleDeburred}
+              onChange={setFlashHoleDeburred}
+            />
+          </Half>
+        </Row>
+        <Row>
+          <Half>
+            <Segmented label="Annealed" options={YES_NO} value={annealed} onChange={setAnnealed} />
+          </Half>
+          <Half>
+            <Field
+              label="Anneal method"
+              value={annealMethod}
+              onChangeText={setAnnealMethod}
+              placeholder="AMP mode 62"
+            />
+          </Half>
+        </Row>
+        <Field
+          label="Prep notes"
+          value={casePrepNotes}
+          onChangeText={setCasePrepNotes}
+          multiline
+          placeholder="Chamfer, deburr, pocket uniforming…"
         />
       </CollapsibleSection>
 
-      <CollapsibleSection title="Brass & seating">
+      <CollapsibleSection title={STAGE_TITLES.sizing} initiallyOpen={filledStages.has('sizing')}>
+        <Field
+          label="Sizing die"
+          value={sizingDie}
+          onChangeText={setSizingDie}
+          placeholder="Redding Type S Full Length Bushing"
+          autoCapitalize="words"
+        />
         <Button
-          label="Choose Brass"
+          label="Choose Sizing Die"
           variant="secondary"
-          onPress={() => setBrassPickerOpen(true)}
-          style={{ marginBottom: spacing.md }}
+          onPress={() => setSizingDiePickerOpen(true)}
+          style={{ marginBottom: spacing.lg }}
+        />
+        <Segmented
+          label="Sizes"
+          options={SIZING_DIE_TYPE_CHOICES}
+          value={sizingDieType}
+          onChange={setSizingDieType}
         />
         <Row>
           <Half>
-            <Field label="Brass" value={brass} onChangeText={setBrass} placeholder="Lapua" />
+            <NumericField
+              label="Bushing"
+              value={bushingSize}
+              onChangeText={(v) => {
+                setBushingSize(v);
+                clearError('bushingSize');
+              }}
+              suffix="in"
+              placeholder="0.289"
+              error={errors.bushingSize}
+            />
           </Half>
           <Half>
             <NumericField
-              label="Firings"
-              value={brassFirings}
+              label="Expander mandrel"
+              value={expanderMandrel}
               onChangeText={(v) => {
-                setBrassFirings(v);
-                clearError('brassFirings');
+                setExpanderMandrel(v);
+                clearError('expanderMandrel');
               }}
-              integer
-              error={errors.brassFirings}
+              suffix="in"
+              placeholder="0.2625"
+              error={errors.expanderMandrel}
             />
           </Half>
         </Row>
+        <NumericField
+          label="Shoulder bump"
+          value={shoulderBump}
+          onChangeText={(v) => {
+            setShoulderBump(v);
+            clearError('shoulderBump');
+          }}
+          suffix="in"
+          placeholder="0.002"
+          error={errors.shoulderBump}
+        />
+        <Field
+          label="Lube"
+          value={lubeMethod}
+          onChangeText={setLubeMethod}
+          placeholder="Imperial wax, graphite necks"
+        />
+        <Field
+          label="Press"
+          value={pressName}
+          onChangeText={setPressName}
+          placeholder="Forster Co-Ax"
+          autoCapitalize="words"
+        />
+        <Button label="Choose Press" variant="secondary" onPress={() => setPressPickerOpen(true)} />
+      </CollapsibleSection>
+
+      <CollapsibleSection title={STAGE_TITLES.priming} initiallyOpen={filledStages.has('priming')}>
+        <Text style={[type.secondary, styles.sectionHint]}>
+          The primer itself is in Ingredients — this is the lot and how deep it seated.
+        </Text>
+        <Row>
+          <Half>
+            <Field label="Primer lot #" value={primerLot} onChangeText={setPrimerLot} placeholder="Lot 91-2" />
+          </Half>
+          <Half>
+            <NumericField
+              label="Below flush"
+              value={primerSeatingDepth}
+              onChangeText={(v) => {
+                setPrimerSeatingDepth(v);
+                clearError('primerSeatingDepth');
+              }}
+              suffix="in"
+              placeholder="0.003"
+              error={errors.primerSeatingDepth}
+            />
+          </Half>
+        </Row>
+      </CollapsibleSection>
+
+      <CollapsibleSection title={STAGE_TITLES.charging} initiallyOpen={filledStages.has('charging')}>
+        <Text style={[type.secondary, styles.sectionHint]}>
+          Powder and charge weight are in Ingredients — this is how the charge was thrown.
+        </Text>
+        <Field
+          label="Charge method"
+          value={chargeMethod}
+          onChangeText={setChargeMethod}
+          placeholder="Autotrickler V4"
+        />
+        <Row>
+          <Half>
+            <Field label="Powder lot #" value={powderLot} onChangeText={setPowderLot} placeholder="Lot 8021" />
+          </Half>
+          <Half>
+            <NumericField
+              label="Tolerance (±)"
+              value={chargeVariance}
+              onChangeText={(v) => {
+                setChargeVariance(v);
+                clearError('chargeVariance');
+              }}
+              suffix="gr"
+              placeholder="0.02"
+              error={errors.chargeVariance}
+            />
+          </Half>
+        </Row>
+      </CollapsibleSection>
+
+      <CollapsibleSection title={STAGE_TITLES.seating} initiallyOpen={filledStages.has('seating')}>
+        <Field
+          label="Seating die"
+          value={seatingDie}
+          onChangeText={setSeatingDie}
+          placeholder="Redding Competition Seating"
+          autoCapitalize="words"
+        />
+        <Button
+          label="Choose Seating Die"
+          variant="secondary"
+          onPress={() => setSeatingDiePickerOpen(true)}
+          style={{ marginBottom: spacing.lg }}
+        />
+        <Field
+          label="Micrometer setting"
+          value={seatingMicrometer}
+          onChangeText={setSeatingMicrometer}
+          placeholder="4.5 on the dial"
+        />
         <Row>
           <Half>
             <NumericField
@@ -456,10 +922,95 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
-        <Field label="Crimp" value={crimp} onChangeText={setCrimp} placeholder="None" />
+        <Row>
+          <Half>
+            <NumericField
+              label="Jump to lands"
+              value={jumpToLands}
+              onChangeText={(v) => {
+                setJumpToLands(v);
+                clearError('jumpToLands');
+              }}
+              suffix="in"
+              signed
+              placeholder="0.020"
+              error={errors.jumpToLands}
+            />
+          </Half>
+          <Half>
+            <NumericField
+              label="Neck tension"
+              value={neckTension}
+              onChangeText={(v) => {
+                setNeckTension(v);
+                clearError('neckTension');
+              }}
+              suffix="in"
+              placeholder="0.002"
+              error={errors.neckTension}
+            />
+          </Half>
+        </Row>
+        <Text style={[type.secondary, styles.sectionHint]}>
+          Jump is measured off the lands — enter a negative value if the bullet is jammed in.
+        </Text>
+        <Row>
+          <Half>
+            <Field label="Bullet lot #" value={bulletLot} onChangeText={setBulletLot} placeholder="Lot 3390" />
+          </Half>
+          <Half>
+            <Field
+              label="Bullets sorted by"
+              value={bulletSortedBy}
+              onChangeText={setBulletSortedBy}
+              placeholder="base-to-ogive"
+            />
+          </Half>
+        </Row>
+        <Row>
+          <Half>
+            <Field label="Crimp" value={crimp} onChangeText={setCrimp} placeholder="None" />
+          </Half>
+          <Half>
+            <Field
+              label="Crimp die"
+              value={crimpDie}
+              onChangeText={setCrimpDie}
+              placeholder="Lee Factory Crimp"
+              autoCapitalize="words"
+            />
+          </Half>
+        </Row>
       </CollapsibleSection>
 
-      <CollapsibleSection title="Velocity & notes">
+      <CollapsibleSection title={STAGE_TITLES.qc} initiallyOpen={filledStages.has('qc')}>
+        <Row>
+          <Half>
+            <NumericField
+              label="Runout (TIR)"
+              value={runout}
+              onChangeText={(v) => {
+                setRunout(v);
+                clearError('runout');
+              }}
+              suffix="in"
+              placeholder="0.001"
+              error={errors.runout}
+            />
+          </Half>
+          <Half>
+            <NumericField
+              label="Loaded weight"
+              value={loadedWeight}
+              onChangeText={(v) => {
+                setLoadedWeight(v);
+                clearError('loadedWeight');
+              }}
+              suffix="gr"
+              error={errors.loadedWeight}
+            />
+          </Half>
+        </Row>
         <NumericField
           label="Muzzle velocity (avg)"
           value={mv}
@@ -502,6 +1053,13 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         <Text style={[type.secondary, styles.sectionHint]}>
           Range cards shift MV by sensitivity × (session temp − measured-at temp).
         </Text>
+        <Field
+          label="Assembly notes"
+          value={assemblyNotes}
+          onChangeText={setAssemblyNotes}
+          multiline
+          placeholder="Anything odd about how this batch went together…"
+        />
         <Field label="Notes" value={notes} onChangeText={setNotes} multiline placeholder="Anything worth remembering about this recipe…" />
       </CollapsibleSection>
 
@@ -542,11 +1100,36 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         onClose={() => setBrassPickerOpen(false)}
         onSelect={setBrass}
       />
+      <ListPickerModal
+        visible={sizingDiePickerOpen}
+        title="Sizing Dies"
+        options={SIZING_DIE_OPTIONS}
+        placeholder="Search Redding, bushing, body…"
+        onClose={() => setSizingDiePickerOpen(false)}
+        onSelect={setSizingDie}
+      />
+      <ListPickerModal
+        visible={seatingDiePickerOpen}
+        title="Seating Dies"
+        options={SEATING_DIE_OPTIONS}
+        placeholder="Search Wilson, micrometer, arbor…"
+        onClose={() => setSeatingDiePickerOpen(false)}
+        onSelect={setSeatingDie}
+      />
+      <ListPickerModal
+        visible={pressPickerOpen}
+        title="Presses"
+        options={PRESS_OPTIONS}
+        placeholder="Search Co-Ax, arbor, turret…"
+        onClose={() => setPressPickerOpen(false)}
+        onSelect={setPressName}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  formHint: { marginBottom: spacing.lg, color: colors.textTertiary },
   sectionHint: { marginBottom: spacing.md, color: colors.textTertiary },
 });

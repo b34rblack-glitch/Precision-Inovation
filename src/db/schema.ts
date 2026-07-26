@@ -84,6 +84,55 @@ export const loadVersions = sqliteTable(
     muzzleVelocityFps: real('muzzle_velocity_fps'),
     mvTempRefF: real('mv_temp_ref_f'), // °F; powder temp at which muzzleVelocityFps was measured
     mvTempSensFpsPerDegF: real('mv_temp_sens_fps_per_deg_f'), // fps per °F; powder temp sensitivity
+
+    // Competition/ELR recipe detail. Every field below is optional — a load is
+    // fully usable without any of it — but a match shooter documenting a
+    // reproducible recipe can record the whole process here.
+
+    // Case prep
+    caseTrimLengthIn: real('case_trim_length_in'), // inches; trimmed case length
+    caseTrimmedTo: text('case_trimmed_to'), // trimmer/method, e.g. "Giraud", "Wilson + micrometer"
+    caseNeckTurned: integer('case_neck_turned', { mode: 'boolean' }).default(false),
+    neckWallThicknessIn: real('neck_wall_thickness_in'), // inches; neck wall after turning
+    casePrepNotes: text('case_prep_notes'), // chamfer/deburr/uniforming detail
+    primerPocketUniformed: integer('primer_pocket_uniformed', { mode: 'boolean' }).default(false),
+    flashHoleDeburred: integer('flash_hole_deburred', { mode: 'boolean' }).default(false),
+    caseVolumeGrH2O: real('case_volume_gr_h2o'), // grains of water; case capacity
+    caseWeightGr: real('case_weight_gr'), // grains; sorted case weight
+    caseAnnealed: integer('case_annealed', { mode: 'boolean' }).default(false),
+    annealMethod: text('anneal_method'), // e.g. "AMP mode 62", "salt bath"
+    caseLotNumber: text('case_lot_number'),
+
+    // Dies & press
+    sizingDie: text('sizing_die'),
+    sizingDieType: text('sizing_die_type'), // free text: 'full-length' | 'neck' | 'body'
+    bushingSizeIn: real('bushing_size_in'), // inches; neck bushing ID
+    expanderMandrelIn: real('expander_mandrel_in'), // inches; expander mandrel diameter
+    shoulderBumpIn: real('shoulder_bump_in'), // inches; shoulder set back from the fired case
+    seatingDie: text('seating_die'),
+    seatingDieMicrometer: text('seating_die_micrometer'), // micrometer setting as marked on the die
+    crimpDie: text('crimp_die'), // the die itself; `crimp` above stays the crimp description
+    pressName: text('press_name'),
+    lubeMethod: text('lube_method'),
+
+    // Charge process (powder temp lives in mvTempRefF/mvTempSensFpsPerDegF above)
+    powderLotNumber: text('powder_lot_number'),
+    chargeMethod: text('charge_method'), // e.g. "Autotrickler V4", "thrown + trickled"
+    chargeVarianceGr: real('charge_variance_gr'), // grains; +/- tolerance held while charging
+
+    // Priming & seating
+    primerLotNumber: text('primer_lot_number'),
+    primerSeatingDepthIn: real('primer_seating_depth_in'), // inches below flush
+    bulletLotNumber: text('bullet_lot_number'),
+    bulletSortedBy: text('bullet_sorted_by'), // e.g. "base-to-ogive", "weight ±0.1gr"
+    jumpToLandsIn: real('jump_to_lands_in'), // inches of freebore jump; negative = jammed in
+    neckTensionIn: real('neck_tension_in'), // inches of interference fit
+
+    // Assembly QC
+    runoutIn: real('runout_in'), // inches; measured concentricity TIR
+    loadedRoundWeightGr: real('loaded_round_weight_gr'), // grains; total loaded round weight
+    assemblyNotes: text('assembly_notes'),
+
     notes: text('notes'),
     ...timestamps,
   },
