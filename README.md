@@ -27,8 +27,13 @@ to real range results. This app is built around exactly that missing loop:
 
 ## Tech
 
-- **Expo SDK 57** (managed workflow, runs in Expo Go) + **expo-router** + TypeScript strict
+- **Expo SDK 57** + **expo-router** + TypeScript strict. Runs in Expo Go, except
+  cloud sync, which needs native code and therefore a development build.
 - **expo-sqlite + Drizzle ORM** — offline-first, all data on-device, JSON backup/export
+- **Optional Google Drive sync** (`src/sync/`) — no server and no hosting cost.
+  Each device keeps a complete snapshot in a folder in the user's *own* Drive
+  and merges row-by-row using a hybrid logical clock, so edits made on two
+  devices while offline both survive. See `docs/google-cloud-setup.md`.
 - **Pure-TS ballistics engine** (`src/lib/ballistics/`): RK4 point-mass integration,
   McCoy G1/G7 drag tables, ICAO atmosphere with humidity correction, Newton zeroing.
   Cross-validated against `js-ballistics` (py_ballisticcalc port) to within 0.5 in of
@@ -44,7 +49,25 @@ npm run typecheck    # tsc --noEmit
 ```
 
 Database schema lives in `src/db/schema.ts`; regenerate migrations with
-`npx drizzle-kit generate` after schema changes.
+`npx drizzle-kit generate` after schema changes. This repo is the only place
+migrations are generated — the desktop app vendors the same `.sql` files.
+
+Every write goes through `src/db/mutate.ts`, which stamps a logical timestamp
+and records tombstones for deletes. `__tests__/sync/funnel.test.ts` fails the
+build if a write appears anywhere else; that guarantee is what sync depends on.
+
+## Sync
+
+Sync is opt-in and costs the developer nothing, because there is no backend:
+users who want it sign in with Google and the app writes to a
+`Precision Innovation` folder in their own Drive using the non-sensitive
+`drive.file` scope, which can only ever see files the app itself created.
+
+The merge engine (`src/sync/merge.ts`) is pure and has no I/O, so the code that
+could destroy data is the code that is cheapest to test. `__tests__/sync/`
+covers each conflict rule in isolation, drives the whole protocol end to end
+against an in-memory Drive, and fuzzes three devices with deliberately skewed
+clocks through random offline edits and sync orders to prove they converge.
 
 ## Safety
 
