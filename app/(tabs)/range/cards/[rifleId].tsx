@@ -73,6 +73,9 @@ export default function RangeCardScreen() {
   // Which unit the hold columns display in. Null = the rifle's turret unit;
   // switch to MIL for mil-dot reticle holdovers (or MOA) regardless of turret.
   const [holdUnitOverride, setHoldUnitOverride] = useState<TurretUnit | null>(null);
+  // The table IS this screen. Setup folds away by default so the card starts
+  // at the top of the viewport instead of a third of the way down it.
+  const [setupOpen, setSetupOpen] = useState(false);
 
   if (!rifle) return <Screen scroll={false} underHeader>{null}</Screen>;
 
@@ -313,8 +316,43 @@ export default function RangeCardScreen() {
         </View>
       ) : (
         <>
+          {/* Everything above the table is setup. It collapses to one line so
+              the card itself starts at the top of the screen. */}
+          <Pressable
+            onPress={() => setSetupOpen((o) => !o)}
+            accessibilityRole="button"
+            accessibilityLabel="Card setup"
+            accessibilityState={{ expanded: setupOpen }}
+            style={({ pressed }) => [styles.setupBar, pressed && { opacity: 0.6 }]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={styles.setupTitle} numberOfLines={1}>
+                {loadLabel}
+                {card ? ` · ${card.preset === 'hunting' ? 'Hunting' : 'Bench'}` : ''}
+                {` · ${holdUnit}`}
+              </Text>
+              <Text style={styles.setupSub} numberOfLines={1}>
+                {status === 'ready'
+                  ? `MV ${mvFps != null ? Math.round(mvFps) : '—'}${
+                      mvSource === 'override' ? ' trued' : mvSource === 'measured' ? ' chrono' : ''
+                    } · BC ${bcText} · ${confirmedCount} confirmed`
+                  : card
+                    ? `${Math.round(ydToDistance(card.startDistanceYd, distanceUnit))}–${Math.round(
+                        ydToDistance(card.endDistanceYd, distanceUnit),
+                      )} ${distanceUnit}`
+                    : 'Tap to set up'}
+              </Text>
+            </View>
+            <Text style={styles.setupAction}>{setupOpen ? 'Done' : 'Setup'}</Text>
+            <Ionicons
+              name={setupOpen ? 'chevron-up' : 'chevron-down'}
+              size={18}
+              color={colors.accent}
+            />
+          </Pressable>
+
           {/* Load picker + preset toggle */}
-          <View style={styles.controls}>
+          <View style={[styles.controls, !setupOpen && styles.hidden]}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
               {rifleLoads.map((l) => (
                 <Chip
@@ -453,7 +491,7 @@ export default function RangeCardScreen() {
 
           {status === 'ready' ? (
             <>
-              <View style={styles.mvRow}>
+              <View style={[styles.mvRow, !setupOpen && styles.hidden]}>
                 <Text style={[type.secondary, { flex: 1 }]}>
                   MV {mvFps != null ? Math.round(mvFps) : '—'} fps
                   {mvSource === 'override' ? ' (trued)' : mvSource === 'measured' ? ' (chrono)' : ''}
@@ -479,7 +517,7 @@ export default function RangeCardScreen() {
                 </Pressable>
               </View>
 
-              {mvSource === 'override' || bcScale != null ? (
+              {setupOpen && (mvSource === 'override' || bcScale != null) ? (
                 <View style={styles.mvRow}>
                   <Text style={[type.secondary, { flex: 1, color: colors.textTertiary }]}>
                     Calibration applied
@@ -725,6 +763,19 @@ export default function RangeCardScreen() {
 
 const styles = StyleSheet.create({
   controls: { paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
+  hidden: { display: 'none' },
+  setupBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  setupTitle: { ...type.body, fontWeight: '700' },
+  setupSub: { ...type.secondary, marginTop: 1 },
+  setupAction: { ...type.secondary, color: colors.accent, fontWeight: '700' },
   distancesRow: {
     flexDirection: 'row',
     alignItems: 'center',
