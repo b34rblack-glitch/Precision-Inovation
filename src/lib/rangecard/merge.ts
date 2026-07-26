@@ -38,6 +38,15 @@ export type CardRow = {
   dropIn: number;
   tofS: number;
   mach: number;
+  /**
+   * Signed spin drift + Coriolis horizontal total, inches (positive = impact
+   * RIGHT; the hold is the opposite side). 0 when neither effect is active.
+   */
+  driftIn: number;
+  driftMil: number;
+  driftMoa: number;
+  /** Signed aero-jump vertical offset, inches (+ = high). Already folded into elevation. */
+  aeroJumpIn: number;
 };
 
 /** Distance match window for treating an observation as "this row": ±2%. */
@@ -79,6 +88,10 @@ function rowFromPoint(
     dropIn: p.dropIn,
     tofS: p.tofS,
     mach: p.mach,
+    driftIn: p.driftIn,
+    driftMil: p.driftMil,
+    driftMoa: p.driftMoa,
+    aeroJumpIn: p.aeroJumpIn,
   };
 }
 
@@ -152,48 +165,62 @@ function toUnit(p: TrajectoryPoint, unit: TurretUnit): number {
  * there is nothing useful to true against (needs >= 1 confirmed hold at
  * 300 yd or beyond — closer holds barely constrain MV).
  */
-export function trueMuzzleVelocity(params: {
-  solverInput: Omit<BallisticInput, 'windMph'>;
-  observations: ObservedDope[];
-  turretUnit: TurretUnit;
-}): number | null {
-  const { solverInput, observations, turretUnit } = params;
-  const usable = observations.filter(
-    (o) => o.elevationHold != null && o.distanceYd >= 300,
-  );
-  if (usable.length === 0) return null;
+/** MV truing needs distance to be sensitive to velocity at all. */
+export const MV_TRUE_MIN_YD = 300;
+/**
+ * Drag truing needs range where BC error dominates. Near the muzzle a BC
+ * change barely moves the impact, so short holds would make the fit noise.
+ */
+export const DRAG_TRUE_MIN_YD = 400;
 
-  const targetHolds = usable.map((o) => ({
-    distanceYd: o.distanceYd,
-    holdMilOrMoa: holdToUnit(o.elevationHold!, o.holdUnit ?? turretUnit, turretUnit),
-  }));
-  const maxDistance = Math.max(...targetHolds.map((t) => t.distanceYd));
+type TargetHold = { distanceYd: number; holdMilOrMoa: number };
 
-  const error = (mvFps: number): number => {
-    const points = solveTrajectory({
-      ...solverInput,
-      mvFps,
-      maxDistanceYd: maxDistance,
-      stepYd: 1,
-      windMph: 0,
-    });
-    return targetHolds.reduce((sum, t) => {
-      const p = points[Math.min(Math.round(t.distanceYd) - 1, points.length - 1)];
-      if (!p) return sum;
-      const predicted = toUnit(p, turretUnit);
-      return sum + (predicted - t.holdMilOrMoa) ** 2;
-    }, 0);
-  };
+function usableHolds(
+  observations: ObservedDope[],
+  turretUnit: TurretUnit,
+  minDistanceYd: number,
+): TargetHold[] {
+  return observations
+    .filter((o) => o.elevationHold != null && o.distanceYd >= minDistanceYd)
+    .map((o) => ({
+      distanceYd: o.distanceYd,
+      holdMilOrMoa: holdToUnit(o.elevationHold!, o.holdUnit ?? turretUnit, turretUnit),
+    }));
+}
 
-  // Golden-section search on a unimodal error surface.
+/** Sum of squared hold errors for a candidate solver input. */
+function holdError(
+  solverInput: Omit<BallisticInput, 'windMph'>,
+  targets: TargetHold[],
+  turretUnit: TurretUnit,
+): number {
+  const maxDistance = Math.max(...targets.map((t) => t.distanceYd));
+  const points = solveTrajectory({
+    ...solverInput,
+    maxDistanceYd: maxDistance,
+    stepYd: 1,
+    windMph: 0,
+  });
+  return targets.reduce((sum, t) => {
+    const p = points[Math.min(Math.round(t.distanceYd) - 1, points.length - 1)];
+    if (!p) return sum;
+    return sum + (toUnit(p, turretUnit) - t.holdMilOrMoa) ** 2;
+  }, 0);
+}
+
+/** Golden-section minimizer on a unimodal 1-D error surface. */
+function goldenSection(
+  lo: number,
+  hi: number,
+  tolerance: number,
+  error: (x: number) => number,
+): number {
   const phi = (Math.sqrt(5) - 1) / 2;
-  let lo = solverInput.mvFps - 150;
-  let hi = solverInput.mvFps + 150;
   let c = hi - phi * (hi - lo);
   let d = lo + phi * (hi - lo);
   let fc = error(c);
   let fd = error(d);
-  for (let i = 0; i < 24 && hi - lo > 1; i++) {
+  for (let i = 0; i < 30 && hi - lo > tolerance; i++) {
     if (fc < fd) {
       hi = d;
       d = c;
@@ -208,5 +235,53 @@ export function trueMuzzleVelocity(params: {
       fd = error(d);
     }
   }
-  return Math.round((lo + hi) / 2);
+  return (lo + hi) / 2;
+}
+
+/**
+ * Stage 1 truing — solve muzzle velocity from confirmed holds.
+ *
+ * Correct when MV is NOT known from a chronograph: inside the supersonic
+ * mid-range, trajectory error is dominated by velocity error, so the drop
+ * back-solves MV. If you do have chrono data, true drag instead
+ * (trueDragScale) — bending MV to fit a long shot would mis-model the curve.
+ */
+export function trueMuzzleVelocity(params: {
+  solverInput: Omit<BallisticInput, 'windMph'>;
+  observations: ObservedDope[];
+  turretUnit: TurretUnit;
+}): number | null {
+  const { solverInput, observations, turretUnit } = params;
+  const targets = usableHolds(observations, turretUnit, MV_TRUE_MIN_YD);
+  if (targets.length === 0) return null;
+  const best = goldenSection(solverInput.mvFps - 150, solverInput.mvFps + 150, 1, (mvFps) =>
+    holdError({ ...solverInput, mvFps }, targets, turretUnit),
+  );
+  return Math.round(best);
+}
+
+/**
+ * Stage 2 truing — solve a drag scale factor (BC multiplier) with muzzle
+ * velocity held fixed.
+ *
+ * This is the right knob once MV is known from a chronograph: the residual
+ * error at long range is the drag model, not the speed. Equivalent to Applied
+ * Ballistics' Drag Scale Factor / Hornady 4DOF's axial form factor. Returns a
+ * multiplier for the load's BC (1 = published), or null without a usable
+ * long-range confirmed hold.
+ */
+export function trueDragScale(params: {
+  solverInput: Omit<BallisticInput, 'windMph'>;
+  observations: ObservedDope[];
+  turretUnit: TurretUnit;
+}): number | null {
+  const { solverInput, observations, turretUnit } = params;
+  const targets = usableHolds(observations, turretUnit, DRAG_TRUE_MIN_YD);
+  if (targets.length === 0) return null;
+  const base = solverInput.bcScale ?? 1;
+  // ±30% brackets any realistic published-BC error with margin.
+  const best = goldenSection(base * 0.7, base * 1.3, 0.001, (bcScale) =>
+    holdError({ ...solverInput, bcScale }, targets, turretUnit),
+  );
+  return Math.round(best * 1000) / 1000;
 }

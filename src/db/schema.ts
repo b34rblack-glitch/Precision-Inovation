@@ -66,6 +66,13 @@ export const loadVersions = sqliteTable(
     bulletWeightGr: real('bullet_weight_gr'),
     bcValue: real('bc_value'),
     bcModel: text('bc_model', { enum: ['G1', 'G7'] }),
+    bulletLengthIn: real('bullet_length_in'), // inches; needed for spin-drift estimate
+    bulletDiameterIn: real('bullet_diameter_in'), // inches; needed for spin-drift estimate
+    // Velocity-banded BC: JSON array of { minVelocityFps, bc } (fps + BC in the
+    // same G-model as bcModel). Null means use the single bcValue everywhere.
+    bcSegments: text('bc_segments', { mode: 'json' }).$type<
+      { minVelocityFps: number; bc: number }[]
+    >(),
     powderName: text('powder_name'),
     chargeGr: real('charge_gr'),
     primer: text('primer'),
@@ -75,6 +82,57 @@ export const loadVersions = sqliteTable(
     coalIn: real('coal_in'),
     crimp: text('crimp'),
     muzzleVelocityFps: real('muzzle_velocity_fps'),
+    mvTempRefF: real('mv_temp_ref_f'), // °F; powder temp at which muzzleVelocityFps was measured
+    mvTempSensFpsPerDegF: real('mv_temp_sens_fps_per_deg_f'), // fps per °F; powder temp sensitivity
+
+    // Competition/ELR recipe detail. Every field below is optional — a load is
+    // fully usable without any of it — but a match shooter documenting a
+    // reproducible recipe can record the whole process here.
+
+    // Case prep
+    caseTrimLengthIn: real('case_trim_length_in'), // inches; trimmed case length
+    caseTrimmedTo: text('case_trimmed_to'), // trimmer/method, e.g. "Giraud", "Wilson + micrometer"
+    caseNeckTurned: integer('case_neck_turned', { mode: 'boolean' }).default(false),
+    neckWallThicknessIn: real('neck_wall_thickness_in'), // inches; neck wall after turning
+    casePrepNotes: text('case_prep_notes'), // chamfer/deburr/uniforming detail
+    primerPocketUniformed: integer('primer_pocket_uniformed', { mode: 'boolean' }).default(false),
+    flashHoleDeburred: integer('flash_hole_deburred', { mode: 'boolean' }).default(false),
+    caseVolumeGrH2O: real('case_volume_gr_h2o'), // grains of water; case capacity
+    caseWeightGr: real('case_weight_gr'), // grains; sorted case weight
+    caseAnnealed: integer('case_annealed', { mode: 'boolean' }).default(false),
+    annealMethod: text('anneal_method'), // e.g. "AMP mode 62", "salt bath"
+    caseLotNumber: text('case_lot_number'),
+
+    // Dies & press
+    sizingDie: text('sizing_die'),
+    sizingDieType: text('sizing_die_type'), // free text: 'full-length' | 'neck' | 'body'
+    bushingSizeIn: real('bushing_size_in'), // inches; neck bushing ID
+    expanderMandrelIn: real('expander_mandrel_in'), // inches; expander mandrel diameter
+    shoulderBumpIn: real('shoulder_bump_in'), // inches; shoulder set back from the fired case
+    seatingDie: text('seating_die'),
+    seatingDieMicrometer: text('seating_die_micrometer'), // micrometer setting as marked on the die
+    crimpDie: text('crimp_die'), // the die itself; `crimp` above stays the crimp description
+    pressName: text('press_name'),
+    lubeMethod: text('lube_method'),
+
+    // Charge process (powder temp lives in mvTempRefF/mvTempSensFpsPerDegF above)
+    powderLotNumber: text('powder_lot_number'),
+    chargeMethod: text('charge_method'), // e.g. "Autotrickler V4", "thrown + trickled"
+    chargeVarianceGr: real('charge_variance_gr'), // grains; +/- tolerance held while charging
+
+    // Priming & seating
+    primerLotNumber: text('primer_lot_number'),
+    primerSeatingDepthIn: real('primer_seating_depth_in'), // inches below flush
+    bulletLotNumber: text('bullet_lot_number'),
+    bulletSortedBy: text('bullet_sorted_by'), // e.g. "base-to-ogive", "weight ±0.1gr"
+    jumpToLandsIn: real('jump_to_lands_in'), // inches of freebore jump; negative = jammed in
+    neckTensionIn: real('neck_tension_in'), // inches of interference fit
+
+    // Assembly QC
+    runoutIn: real('runout_in'), // inches; measured concentricity TIR
+    loadedRoundWeightGr: real('loaded_round_weight_gr'), // grains; total loaded round weight
+    assemblyNotes: text('assembly_notes'),
+
     notes: text('notes'),
     ...timestamps,
   },
@@ -235,7 +293,19 @@ export const rangeCards = sqliteTable(
     endDistanceYd: real('end_distance_yd').notNull().default(1000),
     incrementYd: real('increment_yd').notNull().default(50),
     mvOverrideFps: real('mv_override_fps'),
+    // Drag truing: multiplies the load's BC (1 = published). Stage 2 of the
+    // two-stage truing flow — the right knob when MV is known from a chrono,
+    // since the residual long-range error is then drag rather than velocity.
+    bcScaleFactor: real('bc_scale_factor'),
     atmoSnapshot: text('atmo_snapshot', { mode: 'json' }),
+    latitudeDeg: real('latitude_deg'), // degrees, -90..90 (south negative); Coriolis
+    azimuthDeg: real('azimuth_deg'), // degrees, 0..360 from true north; Coriolis
+    inclineDeg: real('incline_deg'), // degrees, uphill positive; incline-fire correction
+    // Seed the card's wind from the latest logged session wind (see
+    // latestSessionWind) instead of zero wind.
+    useLoggedWind: integer('use_logged_wind', { mode: 'boolean' }).notNull().default(false),
+    // Applied only when the load version has bulletLengthIn + bulletDiameterIn.
+    spinDriftEnabled: integer('spin_drift_enabled', { mode: 'boolean' }).notNull().default(true),
     ...timestamps,
     ...archivable,
   },

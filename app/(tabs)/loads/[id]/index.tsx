@@ -5,11 +5,12 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
+import { CollapsibleSection } from '@/components/Form';
 import { Screen } from '@/components/Screen';
 import { archiveLoad, loadByIdQuery, versionsForLoadQuery } from '@/db/repositories/loads';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
 import { workupsForLoadQuery } from '@/db/repositories/workups';
-import { LoadVersion } from '@/db/schema';
+import { ingredientRows, recipeRows, recipeStages } from '@/features/loads/recipe';
 import { colors, spacing, type } from '@/theme';
 
 function ComponentRow({ label, value }: { label: string; value: string | null }) {
@@ -20,34 +21,6 @@ function ComponentRow({ label, value }: { label: string; value: string | null })
       <Text style={[type.body, { fontVariant: ['tabular-nums'] }]}>{value}</Text>
     </View>
   );
-}
-
-function recipeRows(v: LoadVersion) {
-  return [
-    {
-      label: 'Bullet',
-      value:
-        [v.bulletMake, v.bulletModel, v.bulletWeightGr ? `${v.bulletWeightGr}gr` : null]
-          .filter(Boolean)
-          .join(' ') || null,
-    },
-    { label: 'BC', value: v.bcValue ? `${v.bcValue} ${v.bcModel ?? ''}`.trim() : null },
-    {
-      label: 'Powder',
-      value: v.powderName ? `${v.chargeGr ? `${v.chargeGr}gr ` : ''}${v.powderName}` : null,
-    },
-    { label: 'Primer', value: v.primer },
-    {
-      label: 'Brass',
-      value: v.brass
-        ? `${v.brass}${v.brassFirings != null ? ` (${v.brassFirings}x fired)` : ''}`
-        : null,
-    },
-    { label: 'CBTO', value: v.cbtoIn ? `${v.cbtoIn}"` : null },
-    { label: 'COAL', value: v.coalIn ? `${v.coalIn}"` : null },
-    { label: 'Crimp', value: v.crimp },
-    { label: 'Avg MV', value: v.muzzleVelocityFps ? `${v.muzzleVelocityFps} fps` : null },
-  ];
 }
 
 const WORKUP_LABELS: Record<string, string> = {
@@ -83,6 +56,10 @@ export default function LoadDetailScreen() {
   }
   const current = versions.find((v) => v.id === load.currentVersionId) ?? versions[0];
   const assignedRifle = rifleRows[0];
+  // The recipe reads top-down like a method: ingredients, then the numbered
+  // steps. Stages with nothing recorded are dropped entirely.
+  const ingredients = current ? ingredientRows(current) : [];
+  const stages = recipeStages(current);
 
   const confirmArchive = () => {
     Alert.alert('Archive load?', `"${load.name}" will be hidden but its history is kept.`, [
@@ -133,18 +110,43 @@ export default function LoadDetailScreen() {
       ) : null}
 
       {current ? (
-        <Card>
-          <View style={styles.versionBadgeRow}>
-            <Text style={type.label}>Current recipe</Text>
-            <Text style={[type.label, { color: colors.accent }]}>v{current.versionNumber}</Text>
-          </View>
-          {recipeRows(current).map((row) => (
-            <ComponentRow key={row.label} label={row.label} value={row.value} />
+        <>
+          <Card>
+            <View style={styles.versionBadgeRow}>
+              <Text style={type.label}>Current recipe</Text>
+              <Text style={[type.label, { color: colors.accent }]}>v{current.versionNumber}</Text>
+            </View>
+            <Text style={[type.heading, styles.groupHeading]}>Ingredients</Text>
+            {ingredients.length === 0 ? (
+              <Text style={type.secondary}>No components recorded yet.</Text>
+            ) : (
+              ingredients.map((row) => (
+                <ComponentRow key={row.label} label={row.label} value={row.value} />
+              ))
+            )}
+          </Card>
+
+          {stages.map((stage) => (
+            <CollapsibleSection key={stage.key} title={stage.title} initiallyOpen>
+              {stage.rows.map((row) => (
+                <ComponentRow key={row.label} label={row.label} value={row.value} />
+              ))}
+              {stage.notes.map((note) => (
+                <View key={note.label} style={styles.noteBlock}>
+                  <Text style={type.label}>{note.label}</Text>
+                  <Text style={[type.secondary, { marginTop: 2 }]}>{note.text}</Text>
+                </View>
+              ))}
+            </CollapsibleSection>
           ))}
-          {current.notes ? (
-            <Text style={[type.secondary, { marginTop: spacing.sm }]}>{current.notes}</Text>
+
+          {stages.length === 0 ? (
+            <Text style={[type.secondary, styles.recipePrompt]}>
+              No process detail recorded yet. Tap the pencil to log case prep, sizing, priming,
+              charging, seating and QC — everything needed to load this again exactly.
+            </Text>
           ) : null}
-        </Card>
+        </>
       ) : null}
 
       <Button
@@ -238,6 +240,9 @@ export default function LoadDetailScreen() {
 
 const styles = StyleSheet.create({
   compRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5 },
+  groupHeading: { marginBottom: spacing.xs },
+  noteBlock: { paddingVertical: spacing.sm },
+  recipePrompt: { marginBottom: spacing.lg, color: colors.textTertiary },
   rifleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   versionBadgeRow: {
     flexDirection: 'row',

@@ -47,6 +47,11 @@ export async function getOrCreateCard(
     incrementYd: preset.incrementYd,
     mvOverrideFps: null,
     atmoSnapshot: null,
+    latitudeDeg: null,
+    azimuthDeg: null,
+    inclineDeg: null,
+    useLoggedWind: false,
+    spinDriftEnabled: true,
     createdAt: t,
     updatedAt: t,
   };
@@ -96,9 +101,35 @@ export async function setCardDistances(
     .where(eq(rangeCards.id, cardId));
 }
 
+/** Stage-2 truing: drag scale factor multiplying the load's BC (null = reset). */
+export async function setCardBcScale(cardId: string, scale: number | null): Promise<void> {
+  await db
+    .update(rangeCards)
+    .set({ bcScaleFactor: scale, updatedAt: now() })
+    .where(eq(rangeCards.id, cardId));
+}
+
 export async function setCardMvOverride(cardId: string, mvFps: number | null): Promise<void> {
   await db
     .update(rangeCards)
     .set({ mvOverrideFps: mvFps, updatedAt: now() })
+    .where(eq(rangeCards.id, cardId));
+}
+
+/** Partial update of a card's advanced-ballistics settings. Only the keys
+ * present are written; angles are degrees (see schema for conventions). */
+export async function setCardBallistics(
+  cardId: string,
+  values: Partial<{
+    latitudeDeg: number | null;
+    azimuthDeg: number | null;
+    inclineDeg: number | null;
+    useLoggedWind: boolean;
+    spinDriftEnabled: boolean;
+  }>,
+): Promise<void> {
+  await db
+    .update(rangeCards)
+    .set({ ...values, updatedAt: now() })
     .where(eq(rangeCards.id, cardId));
 }

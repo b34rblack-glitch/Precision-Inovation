@@ -1,0 +1,1 @@
+ALTER TABLE `range_cards` ADD `bc_scale_factor` real;

@@ -15,6 +15,27 @@
       "when": 1784581242748,
       "tag": "0001_old_garia",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785086649459,
+      "tag": "0002_aromatic_sasquatch",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1785088023461,
+      "tag": "0003_married_weapon_omega",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1785088752847,
+      "tag": "0004_skinny_doctor_octopus",
+      "breakpoints": true
     }
   ]
 }

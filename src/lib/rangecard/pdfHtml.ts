@@ -21,11 +21,29 @@ export type PdfCardParams = {
   zeroLabel: string;
   rows: CardRow[];
   generatedOn: Date;
+  /** Active advanced effects, listed as a meta note. Omitted = all off. */
+  advanced?: {
+    spinDrift: boolean;
+    coriolis: { latitudeDeg: number; azimuthDeg: number } | null;
+    inclineDeg: number | null;
+    mvTempAdjusted: boolean;
+  };
 };
+
+/** DRIFT prints only when it would actually move an impact (> 0.05 in somewhere). */
+const DRIFT_MIN_IN = 0.05;
 
 export function rangeCardHtml(p: PdfCardParams): string {
   const bcText = p.bcValue != null ? p.bcValue.toFixed(3) : '—';
   const h = (v: number) => formatHold(holdToUnit(v, p.turretUnit, p.holdUnit), p.holdUnit);
+  const driftActive = p.rows.some((r) => Math.abs(r.driftIn) > DRIFT_MIN_IN);
+  // DRIFT prints the HOLD for spin + Coriolis: driftIn > 0 = impact drifts
+  // RIGHT → hold LEFT ('L'); negative drifts left → hold RIGHT ('R').
+  // driftMil/driftMoa already carry both units, so no turret-unit conversion.
+  const driftCell = (r: CardRow) =>
+    `${formatHold(Math.abs(p.holdUnit === 'MIL' ? r.driftMil : r.driftMoa), p.holdUnit)}&nbsp;${
+      r.driftIn > 0 ? 'L' : 'R'
+    }`;
   const rowsHtml = p.rows
     .map((r) => {
       const dist = Math.round(ydToDistance(r.distanceYd, p.distanceUnit));
@@ -35,7 +53,7 @@ export function rangeCardHtml(p: PdfCardParams): string {
         <td class="dist">${dist}</td>
         <td class="hold">${h(r.elevation)}</td>
         <td>${h(r.wind5Mph)}</td>
-        <td>${h(r.wind10Mph)}</td>
+        <td>${h(r.wind10Mph)}</td>${driftActive ? `\n        <td>${driftCell(r)}</td>` : ''}
         <td>${Math.round(r.velocityFps)}</td>
         <td>${r.energyFtLb != null ? Math.round(r.energyFtLb) : '—'}</td>
         <td>${bcText}</td>
@@ -43,6 +61,18 @@ export function rangeCardHtml(p: PdfCardParams): string {
       </tr>`;
     })
     .join('\n');
+
+  const effects: string[] = [];
+  if (p.advanced?.spinDrift) effects.push('spin drift');
+  if (p.advanced?.coriolis)
+    effects.push(
+      `coriolis lat ${p.advanced.coriolis.latitudeDeg} az ${p.advanced.coriolis.azimuthDeg}`,
+    );
+  if (p.advanced?.inclineDeg != null)
+    effects.push(`incline ${p.advanced.inclineDeg >= 0 ? '+' : ''}${p.advanced.inclineDeg}°`);
+  if (p.advanced?.mvTempAdjusted) effects.push('temp-adj MV');
+  const effectsHtml =
+    effects.length > 0 ? `\n    <div class="meta">${effects.join(' · ')}</div>` : '';
 
   return `<!DOCTYPE html>
 <html>
@@ -77,7 +107,7 @@ export function rangeCardHtml(p: PdfCardParams): string {
       p.bcModel ?? '',
     )} · zero ${escapeHtml(p.zeroLabel)} · ${
       p.preset === 'bench' ? 'BENCH' : 'HUNTING'
-    } · ${p.generatedOn.toLocaleDateString()}</div>
+    } · ${p.generatedOn.toLocaleDateString()}</div>${effectsHtml}
   </div>
   <table>
     <thead>
@@ -85,7 +115,7 @@ export function rangeCardHtml(p: PdfCardParams): string {
         <th>${p.distanceUnit}</th>
         <th>Elev ${p.holdUnit}</th>
         <th>W5</th>
-        <th>W10</th>
+        <th>W10</th>${driftActive ? '\n        <th>Drift</th>' : ''}
         <th>fps</th>
         <th>ft·lb</th>
         <th>BC</th>
@@ -96,7 +126,9 @@ export function rangeCardHtml(p: PdfCardParams): string {
       ${rowsHtml}
     </tbody>
   </table>
-  <div class="legend">● confirmed on target &nbsp; ○ predicted · wind holds full-value at 5 / 10 mph</div>
+  <div class="legend">● confirmed on target &nbsp; ○ predicted · wind holds full-value at 5 / 10 mph${
+    driftActive ? ' · drift L/R = hold direction (spin + Coriolis)' : ''
+  }</div>
 </body>
 </html>`;
 }

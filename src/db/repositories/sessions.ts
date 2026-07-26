@@ -141,6 +141,34 @@ export async function latestSessionAtmo(loadVersionId: string): Promise<{
   return null;
 }
 
+/**
+ * Wind from the most recent logged session for this load's version lineage —
+ * used by range cards with useLoggedWind enabled. Returns the newest (by date)
+ * non-archived session that recorded a wind speed, or null.
+ */
+export async function latestSessionWind(loadVersionId: string): Promise<{
+  windSpeedMph: number | null;
+  windDirClock: number | null;
+} | null> {
+  const versionIds = await lineageVersionIds(loadVersionId);
+  const rows = await db
+    .select({
+      windSpeedMph: rangeSessions.windSpeedMph,
+      windDirClock: rangeSessions.windDirClock,
+    })
+    .from(rangeSessions)
+    .where(
+      and(inArray(rangeSessions.loadVersionId, versionIds), isNull(rangeSessions.archivedAt)),
+    )
+    .orderBy(desc(rangeSessions.date));
+  for (const r of rows) {
+    if (r.windSpeedMph != null) {
+      return { windSpeedMph: r.windSpeedMph, windDirClock: r.windDirClock };
+    }
+  }
+  return null;
+}
+
 export async function createSession(
   data: Omit<NewRangeSession, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<RangeSession> {
@@ -175,6 +203,77 @@ export async function addDopeEntry(
 
 export async function deleteDopeEntry(id: string): Promise<void> {
   await db.delete(dopeEntries).where(eq(dopeEntries.id, id));
+}
+
+/**
+ * Log a confirmed hold straight from the range card, without making the
+ * shooter go create a session first. Reuses today's session for this rifle +
+ * load if one exists (so a day's confirmations group naturally); otherwise
+ * opens one silently. Returns the session used.
+ */
+export async function quickAddDope(params: {
+  rifleId: string;
+  loadVersionId: string | null;
+  distanceYd: number;
+  elevationHold: number | null;
+  windageHold: number | null;
+  holdUnit: 'MIL' | 'MOA';
+  confirmed: boolean;
+  notes?: string | null;
+}): Promise<{ sessionId: string; createdSession: boolean }> {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const candidates = await db
+    .select()
+    .from(rangeSessions)
+    .where(
+      and(
+        eq(rangeSessions.rifleId, params.rifleId),
+        isNull(rangeSessions.archivedAt),
+        params.loadVersionId == null
+          ? isNull(rangeSessions.loadVersionId)
+          : eq(rangeSessions.loadVersionId, params.loadVersionId),
+      ),
+    )
+    .orderBy(desc(rangeSessions.date))
+    .limit(1);
+
+  const todays = candidates.find((s) => s.date >= startOfDay);
+  let sessionId = todays?.id;
+  let createdSession = false;
+  if (!sessionId) {
+    const session = await createSession({
+      rifleId: params.rifleId,
+      loadVersionId: params.loadVersionId,
+      date: now(),
+      location: null,
+      tempF: null,
+      pressureInHg: null,
+      altitudeFt: null,
+      humidityPct: null,
+      windSpeedMph: null,
+      windDirClock: null,
+      targetPhotoUri: null,
+      notes: 'Started from the range card',
+    });
+    sessionId = session.id;
+    createdSession = true;
+  }
+
+  await addDopeEntry({
+    sessionId,
+    distanceYd: params.distanceYd,
+    elevationHold: params.elevationHold,
+    windageHold: params.windageHold,
+    holdUnit: params.holdUnit,
+    groupSizeIn: null,
+    poiUpIn: null,
+    poiRightIn: null,
+    confirmed: params.confirmed,
+    notes: params.notes ?? null,
+  });
+  return { sessionId, createdSession };
 }
 
 /**
