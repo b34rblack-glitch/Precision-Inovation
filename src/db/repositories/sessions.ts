@@ -141,6 +141,34 @@ export async function latestSessionAtmo(loadVersionId: string): Promise<{
   return null;
 }
 
+/**
+ * Wind from the most recent logged session for this load's version lineage —
+ * used by range cards with useLoggedWind enabled. Returns the newest (by date)
+ * non-archived session that recorded a wind speed, or null.
+ */
+export async function latestSessionWind(loadVersionId: string): Promise<{
+  windSpeedMph: number | null;
+  windDirClock: number | null;
+} | null> {
+  const versionIds = await lineageVersionIds(loadVersionId);
+  const rows = await db
+    .select({
+      windSpeedMph: rangeSessions.windSpeedMph,
+      windDirClock: rangeSessions.windDirClock,
+    })
+    .from(rangeSessions)
+    .where(
+      and(inArray(rangeSessions.loadVersionId, versionIds), isNull(rangeSessions.archivedAt)),
+    )
+    .orderBy(desc(rangeSessions.date));
+  for (const r of rows) {
+    if (r.windSpeedMph != null) {
+      return { windSpeedMph: r.windSpeedMph, windDirClock: r.windDirClock };
+    }
+  }
+  return null;
+}
+
 export async function createSession(
   data: Omit<NewRangeSession, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<RangeSession> {

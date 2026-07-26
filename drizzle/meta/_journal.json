@@ -15,6 +15,13 @@
       "when": 1784581242748,
       "tag": "0001_old_garia",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785086649459,
+      "tag": "0002_aromatic_sasquatch",
+      "breakpoints": true
     }
   ]
 }

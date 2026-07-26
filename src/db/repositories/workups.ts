@@ -168,8 +168,11 @@ export async function promoteChargeToVersion(workupId: string, chargeGr: number)
     bulletMake: base?.bulletMake ?? null,
     bulletModel: base?.bulletModel ?? null,
     bulletWeightGr: base?.bulletWeightGr ?? null,
+    bulletLengthIn: base?.bulletLengthIn ?? null,
+    bulletDiameterIn: base?.bulletDiameterIn ?? null,
     bcValue: base?.bcValue ?? null,
     bcModel: base?.bcModel ?? null,
+    bcSegments: base?.bcSegments ?? null,
     powderName: base?.powderName ?? null,
     chargeGr,
     primer: base?.primer ?? null,
@@ -179,6 +182,12 @@ export async function promoteChargeToVersion(workupId: string, chargeGr: number)
     coalIn: base?.coalIn ?? null,
     crimp: base?.crimp ?? null,
     muzzleVelocityFps: measuredMv,
+    // Temp sensitivity is a property of the powder — carry it. The reference
+    // temp is NOT carried: muzzleVelocityFps above is the workup's measured
+    // value and we don't know the temperature it was shot at, so a copied ref
+    // temp would mislabel the new MV. User can set it when known.
+    mvTempSensFpsPerDegF: base?.mvTempSensFpsPerDegF ?? null,
+    mvTempRefF: null,
     notes: `Promoted from workup (${workup.type}) at ${chargeGr}gr`,
     createdAt: t,
     updatedAt: t,

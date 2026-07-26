@@ -66,6 +66,13 @@ export const loadVersions = sqliteTable(
     bulletWeightGr: real('bullet_weight_gr'),
     bcValue: real('bc_value'),
     bcModel: text('bc_model', { enum: ['G1', 'G7'] }),
+    bulletLengthIn: real('bullet_length_in'), // inches; needed for spin-drift estimate
+    bulletDiameterIn: real('bullet_diameter_in'), // inches; needed for spin-drift estimate
+    // Velocity-banded BC: JSON array of { minVelocityFps, bc } (fps + BC in the
+    // same G-model as bcModel). Null means use the single bcValue everywhere.
+    bcSegments: text('bc_segments', { mode: 'json' }).$type<
+      { minVelocityFps: number; bc: number }[]
+    >(),
     powderName: text('powder_name'),
     chargeGr: real('charge_gr'),
     primer: text('primer'),
@@ -75,6 +82,8 @@ export const loadVersions = sqliteTable(
     coalIn: real('coal_in'),
     crimp: text('crimp'),
     muzzleVelocityFps: real('muzzle_velocity_fps'),
+    mvTempRefF: real('mv_temp_ref_f'), // °F; powder temp at which muzzleVelocityFps was measured
+    mvTempSensFpsPerDegF: real('mv_temp_sens_fps_per_deg_f'), // fps per °F; powder temp sensitivity
     notes: text('notes'),
     ...timestamps,
   },
@@ -236,6 +245,14 @@ export const rangeCards = sqliteTable(
     incrementYd: real('increment_yd').notNull().default(50),
     mvOverrideFps: real('mv_override_fps'),
     atmoSnapshot: text('atmo_snapshot', { mode: 'json' }),
+    latitudeDeg: real('latitude_deg'), // degrees, -90..90 (south negative); Coriolis
+    azimuthDeg: real('azimuth_deg'), // degrees, 0..360 from true north; Coriolis
+    inclineDeg: real('incline_deg'), // degrees, uphill positive; incline-fire correction
+    // Seed the card's wind from the latest logged session wind (see
+    // latestSessionWind) instead of zero wind.
+    useLoggedWind: integer('use_logged_wind', { mode: 'boolean' }).notNull().default(false),
+    // Applied only when the load version has bulletLengthIn + bulletDiameterIn.
+    spinDriftEnabled: integer('spin_drift_enabled', { mode: 'boolean' }).notNull().default(true),
     ...timestamps,
     ...archivable,
   },
