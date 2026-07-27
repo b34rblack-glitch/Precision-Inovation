@@ -2,69 +2,24 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { db } from '@/db/client';
 import {
-  dopeEntries,
-  loads,
-  loadVersions,
-  rangeCards,
-  rangeSessions,
-  rifles,
-  shots,
-  shotStrings,
-  workups,
-  workupSteps,
-} from '@/db/schema';
+  chunkRows,
+  chunkSizeFor,
+  DATE_KEYS,
+  TABLE_ORDER,
+  TABLES,
+  type TableName,
+} from '@/lib/tables';
 
 // Full-database JSON backup. schemaVersion tracks the export shape so future
 // versions (and an eventual CSV/cloud importer) can migrate old files.
 
 export const BACKUP_SCHEMA_VERSION = 1;
 
-const TABLES = {
-  rifles,
-  loads,
-  loadVersions,
-  workups,
-  workupSteps,
-  shotStrings,
-  shots,
-  rangeSessions,
-  dopeEntries,
-  rangeCards,
-} as const;
-
-type TableName = keyof typeof TABLES;
-
-// Parents strictly before children (FK order) so restore can insert in this
-// order and delete in exact reverse:
-//   loads -> rifles; loadVersions -> loads; workups -> rifles/loads/loadVersions;
-//   workupSteps -> workups; rangeSessions -> rifles/loadVersions;
-//   shotStrings -> workupSteps/rangeSessions; shots -> shotStrings;
-//   dopeEntries -> rangeSessions; rangeCards -> rifles/loadVersions.
-export const TABLE_ORDER: readonly TableName[] = [
-  'rifles',
-  'loads',
-  'loadVersions',
-  'workups',
-  'workupSteps',
-  'rangeSessions',
-  'shotStrings',
-  'shots',
-  'dopeEntries',
-  'rangeCards',
-];
-
-/** Max rows per INSERT .values() call, to stay under SQLite's bind-variable limit. */
-export const INSERT_CHUNK_SIZE = 500;
-
-/** Split rows into chunks of at most `size` (pure; exported for tests). */
-export function chunkRows<T>(rows: readonly T[], size: number): T[][] {
-  if (size < 1) throw new Error(`chunkRows: size must be >= 1, got ${size}`);
-  const chunks: T[][] = [];
-  for (let i = 0; i < rows.length; i += size) {
-    chunks.push(rows.slice(i, i + size));
-  }
-  return chunks;
-}
+// Table metadata moved to @/lib/tables so the sync merge engine and the desktop
+// app share exactly one definition of the FK ordering. Re-exported here so
+// existing importers of @/lib/backup are unaffected.
+export { chunkRows, INSERT_CHUNK_SIZE, TABLE_ORDER } from '@/lib/tables';
+export type { TableName } from '@/lib/tables';
 
 export type Backup = {
   schemaVersion: number;
@@ -128,7 +83,7 @@ export async function restoreBackup(json: string): Promise<{ counts: Record<stri
       counts[name] = rows.length;
       if (rows.length === 0) continue;
       const revived = rows.map((r) => reviveDates(r));
-      for (const chunk of chunkRows(revived, INSERT_CHUNK_SIZE)) {
+      for (const chunk of chunkRows(revived, chunkSizeFor(name))) {
         tx.insert(TABLES[name] as never)
           .values(chunk as never)
           .run();
@@ -137,8 +92,6 @@ export async function restoreBackup(json: string): Promise<{ counts: Record<stri
   });
   return { counts };
 }
-
-const DATE_KEYS = new Set(['createdAt', 'updatedAt', 'archivedAt', 'date']);
 
 function reviveDates(row: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...row };

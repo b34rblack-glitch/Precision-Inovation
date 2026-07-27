@@ -1,70 +1,40 @@
-// Single design language for the whole app: dark, high-contrast, utilitarian.
-// Amber accent (reticle-illumination orange) reserved for primary actions and
-// confirmed DOPE; everything else stays neutral so data reads first.
+// The app's design language. Raw tokens (colours, spacing, radii, the type
+// scale) live in `@/lib/tokens` so they can be vendored into the desktop build
+// without pulling React Native in; this module re-exports them and adds the
+// composed React Native text styles, which need RN's own types.
 
 import type { TextStyle } from 'react-native';
+import { colors, typeScale } from '@/lib/tokens';
 
-export const colors = {
-  bg: '#121417',
-  surface: '#1C1F24',
-  surfaceRaised: '#24282F',
-  border: '#32373F',
-  text: '#F2F3F5',
-  textSecondary: '#9BA3AE',
-  textTertiary: '#8A93A0',
-  accent: '#F5A623',
-  accentPressed: '#D98F14',
-  onAccent: '#1A1300',
-  confirmed: '#F5A623',
-  predicted: '#8A93A0',
-  danger: '#E5544B',
-  dangerFill: '#B3382F',
-  onDanger: '#FFFFFF',
-  success: '#4CAF7D',
-  fieldBg: '#000000',
-  fieldText: '#FFB300',
-} as const;
-
-export const spacing = {
-  xs: 4,
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
-  xxl: 32,
-} as const;
+export {
+  colors,
+  fieldColors,
+  spacing,
+  radii,
+  touchTarget,
+  pointerTarget,
+  typeScale,
+} from '@/lib/tokens';
 
 // Typed as a mutable FontVariant[] so tokens carrying it stay assignable to
 // RN's TextStyle when spread (an `as const` tuple would be readonly).
 const tabularNums: NonNullable<TextStyle['fontVariant']> = ['tabular-nums'];
 
 export const type = {
-  title: { fontSize: 28, fontWeight: '700' as const, color: colors.text },
-  heading: { fontSize: 20, fontWeight: '600' as const, color: colors.text },
-  body: { fontSize: 16, color: colors.text },
-  secondary: { fontSize: 14, color: colors.textSecondary },
+  title: { ...typeScale.title, color: colors.text },
+  heading: { ...typeScale.heading, color: colors.text },
+  body: { ...typeScale.body, color: colors.text },
+  secondary: { ...typeScale.secondary, color: colors.textSecondary },
   label: {
-    fontSize: 12,
-    fontWeight: '600' as const,
+    ...typeScale.label,
     color: colors.textSecondary,
     textTransform: 'uppercase' as const,
-    letterSpacing: 0.8,
   },
   mono: { fontVariant: tabularNums },
-  caption: { fontSize: 12, color: colors.textSecondary },
+  caption: { ...typeScale.caption, color: colors.textSecondary },
   statValue: {
-    fontSize: 22,
-    fontWeight: '700' as const,
+    ...typeScale.statValue,
     color: colors.text,
     fontVariant: tabularNums,
   },
 } as const;
-
-export const radii = {
-  sm: 6,
-  md: 10,
-  lg: 14,
-} as const;
-
-// Minimum touch target for bench use with cold/gloved hands.
-export const touchTarget = 48;

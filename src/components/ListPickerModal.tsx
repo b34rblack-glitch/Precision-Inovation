@@ -11,15 +11,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Chip } from '@/components/Chip';
+import type { PickerOption } from '@/lib/pickerOption';
 import { colors, radii, spacing, touchTarget, type } from '@/theme';
 
-export type PickerOption = {
-  value: string;
-  /** Optional grouping used for filter chips (e.g. powder maker). */
-  group?: string;
-  /** Optional secondary line (e.g. burn-rate hint). */
-  note?: string;
-};
+// Defined in `@/lib/pickerOption` so the pure component catalogs can be typed
+// by it without importing this React Native module. Re-exported here so
+// existing `@/components/ListPickerModal` importers are unaffected.
+export type { PickerOption };
 
 type Props = {
   visible: boolean;

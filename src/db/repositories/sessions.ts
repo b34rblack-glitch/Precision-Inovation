@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { newId, now } from '@/db/ids';
+import { deleteRow, insertRow, insertRows, mutate, updateRow } from '@/db/mutate';
 import {
   DopeEntry,
   dopeEntries,
@@ -13,6 +14,7 @@ import {
   shotStrings,
 } from '@/db/schema';
 import { sampleSd } from '@/lib/workup/stats';
+import { autoSessionId } from '@/sync/autoSession';
 
 export function activeSessionsQuery() {
   return db
@@ -174,7 +176,7 @@ export async function createSession(
 ): Promise<RangeSession> {
   const t = now();
   const row: NewRangeSession = { ...data, id: newId(), createdAt: t, updatedAt: t };
-  await db.insert(rangeSessions).values(row);
+  mutate((tx) => insertRow(tx, 'rangeSessions', row));
   return row as RangeSession;
 }
 
@@ -182,14 +184,21 @@ export async function updateSession(
   id: string,
   data: Partial<Omit<NewRangeSession, 'id' | 'createdAt' | 'updatedAt'>>,
 ): Promise<void> {
-  await db.update(rangeSessions).set({ ...data, updatedAt: now() }).where(eq(rangeSessions.id, id));
+  mutate((tx) => updateRow(tx, 'rangeSessions', id, data));
 }
 
 export async function archiveSession(id: string): Promise<void> {
-  await db
-    .update(rangeSessions)
-    .set({ archivedAt: now(), updatedAt: now() })
-    .where(eq(rangeSessions.id, id));
+  mutate((tx) => {
+    // Guarded like every other archiver, so re-archiving no longer moves
+    // archivedAt forward (this one was missing the check).
+    const [existing] = tx
+      .select({ id: rangeSessions.id })
+      .from(rangeSessions)
+      .where(and(eq(rangeSessions.id, id), isNull(rangeSessions.archivedAt)))
+      .all();
+    if (!existing) return;
+    updateRow(tx, 'rangeSessions', id, { archivedAt: now() });
+  });
 }
 
 export async function addDopeEntry(
@@ -197,12 +206,16 @@ export async function addDopeEntry(
 ): Promise<DopeEntry> {
   const t = now();
   const row: NewDopeEntry = { ...data, id: newId(), createdAt: t, updatedAt: t };
-  await db.insert(dopeEntries).values(row);
+  mutate((tx) => insertRow(tx, 'dopeEntries', row));
   return row as DopeEntry;
 }
 
+/**
+ * Hard delete, plus a tombstone so the row cannot come back from another
+ * device on the next sync.
+ */
 export async function deleteDopeEntry(id: string): Promise<void> {
-  await db.delete(dopeEntries).where(eq(dopeEntries.id, id));
+  mutate((tx) => deleteRow(tx, 'dopeEntries', id));
 }
 
 /**
@@ -221,59 +234,83 @@ export async function quickAddDope(params: {
   confirmed: boolean;
   notes?: string | null;
 }): Promise<{ sessionId: string; createdSession: boolean }> {
-  const startOfDay = new Date();
+  const t = now();
+  const startOfDay = new Date(t);
   startOfDay.setHours(0, 0, 0, 0);
 
-  const candidates = await db
-    .select()
-    .from(rangeSessions)
-    .where(
-      and(
-        eq(rangeSessions.rifleId, params.rifleId),
-        isNull(rangeSessions.archivedAt),
-        params.loadVersionId == null
-          ? isNull(rangeSessions.loadVersionId)
-          : eq(rangeSessions.loadVersionId, params.loadVersionId),
-      ),
-    )
-    .orderBy(desc(rangeSessions.date))
-    .limit(1);
+  return mutate((tx) => {
+    const candidates = tx
+      .select()
+      .from(rangeSessions)
+      .where(
+        and(
+          eq(rangeSessions.rifleId, params.rifleId),
+          isNull(rangeSessions.archivedAt),
+          params.loadVersionId == null
+            ? isNull(rangeSessions.loadVersionId)
+            : eq(rangeSessions.loadVersionId, params.loadVersionId),
+        ),
+      )
+      .orderBy(desc(rangeSessions.date))
+      .limit(1)
+      .all();
 
-  const todays = candidates.find((s) => s.date >= startOfDay);
-  let sessionId = todays?.id;
-  let createdSession = false;
-  if (!sessionId) {
-    const session = await createSession({
-      rifleId: params.rifleId,
-      loadVersionId: params.loadVersionId,
-      date: now(),
-      location: null,
-      tempF: null,
-      pressureInHg: null,
-      altitudeFt: null,
-      humidityPct: null,
-      windSpeedMph: null,
-      windDirClock: null,
-      targetPhotoUri: null,
-      notes: 'Started from the range card',
+    // Prefer a session the user already has open today, auto-created or not.
+    const todays = candidates.find((s) => s.date >= startOfDay);
+    let sessionId = todays?.id;
+    let createdSession = false;
+
+    if (!sessionId) {
+      // Derived, not random: two devices at the same bench on the same day
+      // converge on one session instead of creating one each. See autoSession.ts.
+      sessionId = autoSessionId(params.rifleId, params.loadVersionId, t);
+
+      const [already] = tx
+        .select({ id: rangeSessions.id })
+        .from(rangeSessions)
+        .where(eq(rangeSessions.id, sessionId))
+        .all();
+
+      if (!already) {
+        insertRow(tx, 'rangeSessions', {
+          id: sessionId,
+          rifleId: params.rifleId,
+          loadVersionId: params.loadVersionId,
+          date: t,
+          location: null,
+          tempF: null,
+          pressureInHg: null,
+          altitudeFt: null,
+          humidityPct: null,
+          windSpeedMph: null,
+          windDirClock: null,
+          targetPhotoUri: null,
+          notes: 'Started from the range card',
+          createdAt: t,
+          updatedAt: t,
+        });
+        createdSession = true;
+      }
+    }
+
+    insertRow(tx, 'dopeEntries', {
+      id: newId(),
+      sessionId,
+      distanceYd: params.distanceYd,
+      elevationHold: params.elevationHold,
+      windageHold: params.windageHold,
+      holdUnit: params.holdUnit,
+      groupSizeIn: null,
+      poiUpIn: null,
+      poiRightIn: null,
+      confirmed: params.confirmed,
+      notes: params.notes ?? null,
+      createdAt: t,
+      updatedAt: t,
     });
-    sessionId = session.id;
-    createdSession = true;
-  }
 
-  await addDopeEntry({
-    sessionId,
-    distanceYd: params.distanceYd,
-    elevationHold: params.elevationHold,
-    windageHold: params.windageHold,
-    holdUnit: params.holdUnit,
-    groupSizeIn: null,
-    poiUpIn: null,
-    poiRightIn: null,
-    confirmed: params.confirmed,
-    notes: params.notes ?? null,
+    return { sessionId, createdSession };
   });
-  return { sessionId, createdSession };
 }
 
 /**
@@ -301,38 +338,57 @@ export async function addShotString(owner: {
     esFps = Math.max(...velocities) - Math.min(...velocities);
   }
 
-  await db.insert(shotStrings).values({
-    id: stringId,
-    sessionId: owner.sessionId ?? null,
-    workupStepId: owner.workupStepId ?? null,
-    avgFps,
-    sdFps,
-    esFps,
-    shotCount: velocities.length > 0 ? velocities.length : null,
-    source: 'manual',
-    notes: owner.notes ?? null,
-    createdAt: t,
-    updatedAt: t,
+  // One transaction so a string can never be committed without its shots — the
+  // cached avg/sd/es on the string row would otherwise describe data that is
+  // not there.
+  mutate((tx) => {
+    insertRow(tx, 'shotStrings', {
+      id: stringId,
+      sessionId: owner.sessionId ?? null,
+      workupStepId: owner.workupStepId ?? null,
+      avgFps,
+      sdFps,
+      esFps,
+      shotCount: velocities.length > 0 ? velocities.length : null,
+      source: 'manual',
+      notes: owner.notes ?? null,
+      createdAt: t,
+      updatedAt: t,
+    });
+
+    if (velocities.length > 0) {
+      insertRows(
+        tx,
+        'shots',
+        velocities.map((v, i) => ({
+          id: newId(),
+          stringId,
+          seq: i + 1,
+          velocityFps: v,
+          createdAt: t,
+          updatedAt: t,
+        })),
+      );
+    }
   });
 
-  if (velocities.length > 0) {
-    await db.insert(shots).values(
-      velocities.map((v, i) => ({
-        id: newId(),
-        stringId,
-        seq: i + 1,
-        velocityFps: v,
-        createdAt: t,
-        updatedAt: t,
-      })),
-    );
-  }
   return stringId;
 }
 
+/**
+ * Deletes a string and its shots, tombstoning each row.
+ *
+ * The shots are deleted one at a time rather than with a single
+ * `WHERE stringId = ?`: a bulk delete leaves no per-row tombstone, so every
+ * shot would be resurrected from another device on the next sync while the
+ * string that owned them stayed deleted.
+ */
 export async function deleteShotString(id: string): Promise<void> {
-  await db.delete(shots).where(eq(shots.stringId, id));
-  await db.delete(shotStrings).where(eq(shotStrings.id, id));
+  mutate((tx) => {
+    const children = tx.select({ id: shots.id }).from(shots).where(eq(shots.stringId, id)).all();
+    for (const child of children) deleteRow(tx, 'shots', child.id);
+    deleteRow(tx, 'shotStrings', id);
+  });
 }
 
 /**

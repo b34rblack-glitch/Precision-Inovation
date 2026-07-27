@@ -28,7 +28,12 @@
       "expo-router",
       "expo-sqlite",
       "expo-sharing",
-      "expo-font"
-    ]
+      "expo-font",
+      "@react-native-google-signin/google-signin"
+    ],
+    "extra": {
+      "googleWebClientId": "",
+      "googleIosClientId": ""
+    }
   }
 }

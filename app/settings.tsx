@@ -5,6 +5,7 @@ import { Alert, Text } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
+import { SyncCard } from '@/features/sync/SyncCard';
 import { buildBackup, exportBackup, restoreBackup } from '@/lib/backup';
 import { spacing, type } from '@/theme';
 
@@ -77,10 +78,13 @@ export default function SettingsScreen() {
 
   return (
     <Screen underHeader>
+      <SyncCard />
+
       <Card>
         <Text style={type.heading}>Your data</Text>
         <Text style={[type.secondary, { marginTop: spacing.sm, marginBottom: spacing.lg }]}>
-          Everything lives on this device — nothing is uploaded anywhere. Export a backup before
+          Your data lives on this device. Nothing is uploaded unless you turn on cloud sync above,
+          and even then it goes only to a folder in your own Google Drive. Export a backup before
           switching phones, and back up regularly.
         </Text>
         <Button label="Export Backup" onPress={doExport} loading={exporting} disabled={importing} />
