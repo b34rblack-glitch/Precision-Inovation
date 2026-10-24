@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>CROSS Magnum 175 TA Dope</title>
+<title>Rifle Dope Card</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <style>
-/* Layout: a field data card. One header band with the rifle system, one row of
-   condition controls, then holds as big figures, the path chart beside a mil
-   holdover scale, and the full dope table. Data in mono, headings condensed. */
+/* Layout: a field data card. Rifle switch and system header, one row of
+   condition controls, then holds as big figures, the path chart beside a
+   turret-unit holdover scale, and the full dope table. Data in mono. */
 :root {
   --bg: #f4f5f2;
   --surface: #fcfcfb;
@@ -80,6 +80,10 @@ header { padding-top: 28px; border-bottom: 2px solid var(--ink); padding-bottom:
   border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; cursor: pointer;
 }
 .chip[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); background: var(--surface-2); }
+.chips .grp { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); align-self: center; margin-right: 2px; flex-basis: 100%; }
+@media (min-width: 700px) { .chips .grp { flex-basis: auto; } }
+.chip.rifle { font-family: var(--font-display); font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; padding: 8px 16px; border-radius: 6px; }
+.chip.rifle[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 .chip:focus-visible, input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
 .field { display: grid; gap: 4px; min-width: 0; }
@@ -151,30 +155,37 @@ a { color: var(--accent); }
 <body>
 <div class="wrap">
 <header>
+  <div class="chips" id="riflechips" role="group" aria-label="Rifle">
+    <button class="chip rifle" type="button" data-rifle="cross" aria-pressed="true">SIG CROSS Magnum · .300 Win Mag</button>
+    <button class="chip rifle" type="button" data-rifle="mpr" aria-pressed="false">Christensen MPR · .300 PRC</button>
+  </div>
   <div>
-    <span class="eyebrow">Range card · 100 yd zero · Phoenix, AZ</span>
-    <h1>SIG CROSS Magnum · .300 Win Mag<br>Federal Terminal Ascent 175 gr</h1>
+    <span class="eyebrow" id="eyebrow"></span>
+    <h1 id="title"></h1>
   </div>
-  <div class="system">
-    <div><span class="eyebrow">Rifle</span><b>SIG SAUER CROSS Magnum</b><small>24 in 5R stainless, 1:9 RH twist, 5/8×24</small></div>
-    <div><span class="eyebrow">Ammunition</span><b>Federal Premium Terminal Ascent 175 gr</b><small>P300WTA2 · 3,030 fps published · G7 .258 / G1 .520</small></div>
-    <div><span class="eyebrow">Optic</span><b>Leupold Mark 4HD 4.5-18×52</b><small>34 mm, FFP illuminated PR1-MIL, 0.1 MIL clicks</small></div>
-    <div><span class="eyebrow">Mount</span><b>SIG ALPHA6 34 mm extra-high rings</b><small>1.25 in rail-to-centerline · est. 2.1 in over bore</small></div>
-  </div>
+  <div class="system" id="system"></div>
 </header>
 
 <section class="controls" aria-label="Conditions">
-  <div class="chips" role="group" aria-label="Condition presets">
-    <button class="chip" type="button" data-preset="phx" aria-pressed="true">Phoenix, mild day · 75°F</button>
+  <div class="chips" role="group" aria-label="Arizona condition presets">
+    <span class="grp">Arizona</span>
+    <button class="chip" type="button" data-preset="zero" aria-pressed="true">Zero day · 4 Oct 10:00 · 85°F</button>
     <button class="chip" type="button" data-preset="phx-hot" aria-pressed="false">Phoenix, summer · 105°F</button>
-    <button class="chip" type="button" data-preset="rim" aria-pressed="false">Mogollon Rim · 6,500 ft · 45°F</button>
     <button class="chip" type="button" data-preset="winter" aria-pressed="false">Phoenix, winter dawn · 40°F</button>
+    <button class="chip" type="button" data-preset="rim" aria-pressed="false">Mogollon Rim · 6,500 ft · 45°F</button>
+  </div>
+  <div class="chips" role="group" aria-label="Montana condition presets">
+    <span class="grp">Miller Mountain · Lolo NF, MT</span>
+    <button class="chip" type="button" data-preset="mt-dawn" aria-pressed="false">Late-Oct dawn · 5,500 ft · 22°F</button>
+    <button class="chip" type="button" data-preset="mt-mid" aria-pressed="false">Nov midday · 5,500 ft · 35°F</button>
+    <button class="chip" type="button" data-preset="mt-cold" aria-pressed="false">Cold snap · 6,500 ft · 5°F</button>
+    <button class="chip" type="button" data-preset="mt-top" aria-pressed="false">Ridge top · 7,000 ft · 15°F</button>
   </div>
   <div class="fields">
-    <div class="field"><label for="temp">Temperature</label><input id="temp" type="number" step="1" value="75"><span class="unit">°F</span></div>
+    <div class="field"><label for="temp">Temperature</label><input id="temp" type="number" step="1" value="85"><span class="unit">°F</span></div>
     <div class="field"><label for="alt">Elevation</label><input id="alt" type="number" step="100" value="1100"><span class="unit">ft (sets pressure)</span></div>
     <div class="field"><label for="press">Station pressure</label><input id="press" type="number" step="0.01" placeholder="auto"><span class="unit">inHg, blank = from elevation</span></div>
-    <div class="field"><label for="rh">Humidity</label><input id="rh" type="number" step="5" min="0" max="100" value="20"><span class="unit">%</span></div>
+    <div class="field"><label for="rh">Humidity</label><input id="rh" type="number" step="5" min="0" max="100" value="25"><span class="unit">%</span></div>
     <div class="field"><label for="mv">Muzzle velocity</label><input id="mv" type="number" step="5" value="3030"><span class="unit">fps · replace with chrono</span></div>
     <div class="field"><label for="bc">BC (G7)</label><input id="bc" type="number" step="0.001" value="0.258"><span class="unit">lb/in²</span></div>
     <div class="field"><label for="sh">Sight height</label><input id="sh" type="number" step="0.05" value="2.1"><span class="unit">in over bore</span></div>
@@ -191,6 +202,12 @@ a { color: var(--accent); }
   <div class="stats" id="stats"></div>
 </section>
 
+<section aria-label="Montana scenarios">
+  <div class="card-head"><h2>Miller Mountain vs the Phoenix zero</h2><span class="note" id="scen-note"></span></div>
+  <div class="tablewrap"><table id="scen"><thead></thead><tbody></tbody></table></div>
+  <div class="tfoot"><span>Elevation hold per scenario, same rifle inputs, no wind. Miller Peak tops out at 7,030 ft; the Miller Creek drainage starts near 3,800 ft, so set Elevation to where you are glassing from.</span><span>Montana temperatures are late-season projections (Missoula valley Nov. averages 41 / 24 °F, minus about 3.5 °F per 1,000 ft), not forecasts.</span></div>
+</section>
+
 <section class="row2" aria-label="Charts">
   <div class="card chart-card">
     <div class="card-head">
@@ -200,17 +217,17 @@ a { color: var(--accent); }
     <div class="chart" id="chart"><svg aria-labelledby="chart-title" role="img"><title id="chart-title">Bullet path in inches below the line of sight, by distance</title></svg><div class="tip" id="tip"></div></div>
   </div>
   <div class="card ret">
-    <h2>Holdover on the mil scale</h2>
-    <span class="note">Center is the 100 yd zero. FFP reticle, so these holds are true at any magnification.</span>
-    <svg id="reticle" role="img" aria-label="Mil scale with the holdover for each 100 yards"></svg>
+    <h2 id="scalehead">Holdover on the MIL scale</h2>
+    <span class="note">Center is the 100 yd zero. Both scopes are first focal plane, so these holds are true at any magnification.</span>
+    <svg id="reticle" role="img" aria-label="Turret-unit scale with the holdover for each 100 yards"></svg>
   </div>
 </section>
 
 <section aria-label="Dope table">
-  <div class="card-head"><h2>Dope table</h2><span class="note">Elev MIL is rounded to the 0.1 MIL click. Drift is spin drift only; hold the direction shown.</span></div>
+  <div class="card-head"><h2>Dope table</h2><span class="note" id="roundnote"></span></div>
   <div class="tablewrap"><table id="dope">
     <thead><tr>
-      <th>Yards</th><th>Path in</th><th>Elev MIL</th><th>Elev MOA</th><th id="windhead">Wind MIL</th><th>Drift</th><th>fps</th><th>ft·lb</th><th>TOF s</th><th>Mach</th>
+      <th>Yards</th><th>Path in</th><th>Elev MIL</th><th>Elev MOA</th><th id="windhead">Wind</th><th>Drift</th><th>fps</th><th>ft·lb</th><th>TOF s</th><th>Mach</th>
     </tr></thead>
     <tbody></tbody>
   </table></div>
@@ -221,19 +238,20 @@ a { color: var(--accent); }
   <div>
     <h2>Before you trust it</h2>
     <ul>
-      <li><b>Chronograph the load.</b> 3,030 fps is Federal's 24 in test-barrel number. Your CROSS also has a 24 in barrel, but individual rifles commonly run 20 to 60 fps off. Type the real average into Muzzle velocity.</li>
-      <li><b>Measure sight height.</b> 2.1 in is 1.25 in (ALPHA6 extra-high, rail top to optic centerline, per SIG) plus about 0.85 in from bore center to the top of the CROSS's integral rail, which is an estimate. Measure bore center to scope-tube center and enter it. Each 0.1 in only moves the 1,000 yd hold about 0.03 MIL, so this is a small term.</li>
-      <li><b>True it at distance.</b> Confirm the 100 yd zero in the conditions you zeroed, then shoot 500 to 600 yd on a known target. If impacts are high or low, adjust Muzzle velocity until the predicted hold matches, then re-check 800 or beyond.</li>
-      <li><b>Temperature.</b> The condition presets change air density only. They do not change powder speed, because Federal does not publish the load's temperature sensitivity. If your summer and winter chrono numbers differ, enter each.</li>
+      <li id="note-chrono"></li>
+      <li id="note-sight"></li>
+      <li><b>True it at distance.</b> Both zeros were confirmed at Phoenix Rod and Gun Club on 4 Oct 2026. Shoot 500 to 600 yd on a known target; if impacts are high or low, adjust Muzzle velocity until the predicted hold matches, then re-check 800 or beyond.</li>
+      <li><b>Temperature.</b> The condition presets change air density only. They do not change powder speed, because neither maker publishes the load's temperature sensitivity. Factory magnum loads typically lose 20 to 40 fps between an 85°F Phoenix zero and a 20°F Montana morning. Chronograph in the cold if you can; otherwise expect holds a touch longer than the Montana columns show.</li>
     </ul>
   </div>
   <div>
     <h2>Model</h2>
     <ul>
       <li>Point-mass RK4 solver with the McCoy G7 reference drag curve, ICAO atmosphere with humidity, the same engine as the Precision Innovation app. Zero is solved on flat ground; incline rotates gravity for the shot only.</li>
-      <li>Spin drift uses the Miller stability factor and Litz's approximation for a 1.466 in, 175 gr bullet in a 1:9 right-hand twist. Coriolis and aerodynamic jump are not included; both are under 0.1 MIL inside 800 yd for this load.</li>
-      <li>The hold tiles and the table round to 0.1 MIL, the Mark 4HD's click value. The chart and tooltip use unrounded values.</li>
-      <li>Published figures: Federal lists P300WTA2 at 3,030 fps with a G7 BC of .258 and a 175 gr Terminal Ascent bullet 1.466 in long. SIG lists the CROSS Magnum with a 24 in 1:9 barrel and the ALPHA6 extra-high rings at 1.25 in.</li>
+      <li>Spin drift uses the Miller stability factor and Litz's approximation for the bullet length, weight and twist listed above. Coriolis and aerodynamic jump are not included; both are under 0.1 MIL inside 800 yd for these loads.</li>
+      <li id="note-round"></li>
+      <li id="note-published"></li>
+      <li>Miller Mountain presets use Miller Peak (7,030 ft, Lolo National Forest, 7 mi south of Missoula) and its Miller Creek approach. Set Elevation and Temperature to the day's values for any other spot in the forest.</li>
     </ul>
     <p class="callout">This is a prediction, not a confirmation. Mark confirmed holds on the printed card and let them override the table.</p>
   </div>
@@ -358,33 +376,111 @@ a { color: var(--accent); }
 <script>
 (function () {
   'use strict';
-  var LOAD = { weightGr: 175, twistIn: 9, bulletLengthIn: 1.466, bulletDiameterIn: 0.308 };
-  var PRESETS = {
-    phx: { label: 'Phoenix, mild day', temp: 75, alt: 1100, rh: 20 },
-    'phx-hot': { label: 'Phoenix, summer afternoon', temp: 105, alt: 1100, rh: 10 },
-    rim: { label: 'Mogollon Rim hunt', temp: 45, alt: 6500, rh: 30 },
-    winter: { label: 'Phoenix, winter dawn', temp: 40, alt: 1100, rh: 40 }
+  var RIFLES = {
+    cross: {
+      eyebrow: 'Range card · 100 yd zero · Phoenix Rod and Gun Club · 4 Oct 2026',
+      title: ['SIG CROSS Magnum · .300 Win Mag', 'Federal Terminal Ascent 175 gr'],
+      system: [
+        ['Rifle', 'SIG SAUER CROSS Magnum', '24 in 5R stainless, 1:9 RH twist, 5/8×24'],
+        ['Ammunition', 'Federal Premium Terminal Ascent 175 gr', 'P300WTA2 · 3,030 fps published · G7 .258 / G1 .520'],
+        ['Optic', 'Leupold Mark 4HD 4.5-18×52', '34 mm, FFP illuminated PR1-MIL, 0.1 MIL clicks'],
+        ['Mount', 'SIG ALPHA6 34 mm extra-high rings', '1.25 in rail-to-centerline · est. 2.1 in over bore']
+      ],
+      unit: 'MIL', mv: 3030, bc: 0.258, sh: 2.1, zero: 100,
+      weightGr: 175, twistIn: 9, bulletLengthIn: 1.466, bulletDiameterIn: 0.308,
+      chrono: "3,030 fps is Federal's 24 in test-barrel number. The CROSS also has a 24 in barrel, but individual rifles commonly run 20 to 60 fps off. Type the real average into Muzzle velocity.",
+      sight: "2.1 in is 1.25 in (ALPHA6 extra-high, rail top to optic centerline, per SIG) plus about 0.85 in from bore center to the top of the CROSS's integral rail, which is an estimate. Measure bore center to scope-tube center and enter it. Each 0.1 in only moves the 1,000 yd hold about 0.03 MIL.",
+      published: 'Published figures: Federal lists P300WTA2 at 3,030 fps with a G7 BC of .258 and a 175 gr Terminal Ascent bullet 1.466 in long. SIG lists the CROSS Magnum with a 24 in 1:9 barrel and the ALPHA6 extra-high rings at 1.25 in.'
+    },
+    mpr: {
+      eyebrow: 'Range card · 100 yd zero · Phoenix Rod and Gun Club · 4 Oct 2026',
+      title: ['Christensen Arms MPR · .300 PRC', 'Hornady Precision Hunter 212 gr ELD-X'],
+      system: [
+        ['Rifle', 'Christensen Arms MPR', '26 in carbon-fiber barrel, 1:8 RH twist, 5/8×24'],
+        ['Ammunition', 'Hornady Precision Hunter 212 gr ELD-X', '#82166 · 2,860 fps published · G7 .336 / G1 .673'],
+        ['Optic', 'Leupold Mark 5HD 7-35×56 M1C3', '35 mm, FFP, 1/4 MOA clicks, 3-turn ZeroLock'],
+        ['Mount', 'Leupold Mark 4 35 mm high rings #120180', '1.06 in ring height · est. 1.9 in over bore']
+      ],
+      unit: 'MOA', mv: 2860, bc: 0.336, sh: 1.9, zero: 100,
+      weightGr: 212, twistIn: 8, bulletLengthIn: 1.6, bulletDiameterIn: 0.308,
+      chrono: "2,860 fps is Hornady's 24 in test-barrel number. The MPR's 26 in barrel may run 30 to 50 fps faster, or the rifle may run slow; only a chronograph settles it. Type the real average into Muzzle velocity.",
+      sight: '1.9 in is 1.06 in (Mark 4 high rings, per Leupold) plus about 0.85 in from bore center to the top of the MPR rail, which is an estimate. Measure bore center to scope-tube center and enter it. Each 0.1 in only moves the 1,000 yd hold about 0.1 MOA.',
+      published: 'Published figures: Hornady lists #82166 at 2,860 fps with a G7 BC of .336 for the 212 gr ELD-X; the 1.60 in bullet length is an estimate that only feeds spin drift. Christensen lists the MPR in .300 PRC with a 26 in 1:8 barrel; Leupold lists the Mark 4 35 mm high rings at 1.06 in.'
+    }
   };
+  var PRESETS = {
+    zero: { label: 'Zero day, 4 Oct 2026', temp: 85, alt: 1100, rh: 25 },
+    'phx-hot': { label: 'Phoenix, summer afternoon', temp: 105, alt: 1100, rh: 10 },
+    winter: { label: 'Phoenix, winter dawn', temp: 40, alt: 1100, rh: 40 },
+    rim: { label: 'Mogollon Rim hunt', temp: 45, alt: 6500, rh: 30 },
+    'mt-dawn': { label: 'Miller Mtn, late-Oct dawn', temp: 22, alt: 5500, rh: 65 },
+    'mt-mid': { label: 'Miller Mtn, Nov midday', temp: 35, alt: 5500, rh: 50 },
+    'mt-cold': { label: 'Miller Mtn, cold snap', temp: 5, alt: 6500, rh: 65 },
+    'mt-top': { label: 'Miller Mtn, ridge top', temp: 15, alt: 7000, rh: 60 }
+  };
+  // Side-by-side scenarios for the comparison table: the Phoenix zero day
+  // against the Montana hunt, so the shift in holds is visible at a glance.
+  var SCENARIOS = [
+    { key: 'zero', short: 'Phoenix zero day', sub: '85°F · 1,100 ft' },
+    { key: 'mt-mid', short: 'Miller Mtn midday', sub: '35°F · 5,500 ft' },
+    { key: 'mt-dawn', short: 'Miller Mtn dawn', sub: '22°F · 5,500 ft' },
+    { key: 'mt-cold', short: 'Cold snap', sub: '5°F · 6,500 ft' },
+    { key: 'mt-top', short: 'Ridge top', sub: '15°F · 7,000 ft' }
+  ];
   var $ = function (id) { return document.getElementById(id); };
   var el = { temp: $('temp'), alt: $('alt'), press: $('press'), rh: $('rh'), mv: $('mv'), bc: $('bc'), sh: $('sh'), zero: $('zero'), wind: $('wind'), incl: $('incl'), step: $('step') };
-  var chips = Array.prototype.slice.call(document.querySelectorAll('.chip'));
+  var chips = Array.prototype.slice.call(document.querySelectorAll('.chip[data-preset]'));
+  var rifleChips = Array.prototype.slice.call(document.querySelectorAll('.chip[data-rifle]'));
+  var rifleKey = 'cross';
   var num = function (input, fallback) { var v = parseFloat(input.value); return isFinite(v) ? v : fallback; };
   var fmt = function (n, d) { return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); };
   var mil1 = function (m) { return (Math.round(m * 10) / 10).toFixed(1); };
+  var moa4 = function (m) { return (Math.round(m * 4) / 4).toFixed(2); };
+  var rifle = function () { return RIFLES[rifleKey]; };
+  // Hold in the rifle's turret unit, rounded to its click.
+  var holdOf = function (mil, moa) { return rifle().unit === 'MIL' ? mil1(mil) : moa4(moa); };
+  var unitOf = function () { return rifle().unit; };
+
+  function applyRifle(key) {
+    rifleKey = key;
+    var r = RIFLES[key];
+    rifleChips.forEach(function (c) { c.setAttribute('aria-pressed', String(c.dataset.rifle === key)); });
+    $('eyebrow').textContent = r.eyebrow;
+    var h1 = $('title'); h1.textContent = '';
+    h1.appendChild(document.createTextNode(r.title[0])); h1.appendChild(document.createElement('br')); h1.appendChild(document.createTextNode(r.title[1]));
+    var sys = $('system'); sys.textContent = '';
+    r.system.forEach(function (row) {
+      var d = document.createElement('div');
+      var e = document.createElement('span'); e.className = 'eyebrow'; e.textContent = row[0];
+      var b = document.createElement('b'); b.textContent = row[1];
+      var s = document.createElement('small'); s.textContent = row[2];
+      d.appendChild(e); d.appendChild(b); d.appendChild(s); sys.appendChild(d);
+    });
+    el.mv.value = r.mv; el.bc.value = r.bc; el.sh.value = r.sh; el.zero.value = r.zero;
+    var note = function (id, lead, text) { var li = $(id); li.textContent = ''; if (lead) { var b = document.createElement('b'); b.textContent = lead + ' '; li.appendChild(b); } li.appendChild(document.createTextNode(text)); };
+    note('note-chrono', 'Chronograph the load.', r.chrono);
+    note('note-sight', 'Measure sight height.', r.sight);
+    note('note-round', null, 'The hold tiles and the table round to ' + (r.unit === 'MIL' ? '0.1 MIL, the Mark 4HD\'s click value' : '1/4 MOA, the Mark 5HD\'s click value') + '. The chart and tooltip use unrounded values.');
+    note('note-published', null, r.published);
+    $('roundnote').textContent = 'Elev ' + r.unit + ' is rounded to the ' + (r.unit === 'MIL' ? '0.1 MIL' : '1/4 MOA') + ' click. Drift is spin drift only; hold the direction shown.';
+    $('scalehead').textContent = 'Holdover on the ' + r.unit + ' scale';
+  }
+  rifleChips.forEach(function (c) { c.addEventListener('click', function () { applyRifle(c.dataset.rifle); render(); }); });
 
   function params() {
+    var r = rifle();
     var pressRaw = parseFloat(el.press.value);
     return {
-      mvFps: num(el.mv, 3030), bcG7: num(el.bc, 0.258), zeroYd: num(el.zero, 100), sightHeightIn: num(el.sh, 2.1),
-      tempF: num(el.temp, 75), pressureInHg: isFinite(pressRaw) ? pressRaw : null, altitudeFt: num(el.alt, 1100), humidityPct: num(el.rh, 20),
+      mvFps: num(el.mv, r.mv), bcG7: num(el.bc, r.bc), zeroYd: num(el.zero, r.zero), sightHeightIn: num(el.sh, r.sh),
+      tempF: num(el.temp, 85), pressureInHg: isFinite(pressRaw) ? pressRaw : null, altitudeFt: num(el.alt, 1100), humidityPct: num(el.rh, 25),
       windMph: num(el.wind, 10), inclineDeg: num(el.incl, 0), maxYd: 1000, stepYd: 5,
-      weightGr: LOAD.weightGr, twistIn: LOAD.twistIn, bulletLengthIn: LOAD.bulletLengthIn, bulletDiameterIn: LOAD.bulletDiameterIn
+      weightGr: r.weightGr, twistIn: r.twistIn, bulletLengthIn: r.bulletLengthIn, bulletDiameterIn: r.bulletDiameterIn
     };
   }
   // Reference line: the zero-day conditions with the same rifle inputs.
   function referenceParams(p) {
     var r = {}; for (var k in p) r[k] = p[k];
-    r.tempF = PRESETS.phx.temp; r.altitudeFt = PRESETS.phx.alt; r.humidityPct = PRESETS.phx.rh; r.pressureInHg = null; r.inclineDeg = 0;
+    r.tempF = PRESETS.zero.temp; r.altitudeFt = PRESETS.zero.alt; r.humidityPct = PRESETS.zero.rh; r.pressureInHg = null; r.inclineDeg = 0;
     return r;
   }
   function sameConditions(a, b) {
@@ -420,8 +516,49 @@ a { color: var(--accent); }
     renderHolds(out.rows);
     renderStats(out);
     renderChart();
-    renderReticle(out.rows);
+    renderScale(out.rows);
     renderTable(out.rows, p);
+    renderScenarios(p);
+  }
+
+  // ---- Scenario comparison ----
+  function renderScenarios(p) {
+    var table = $('scen'), thead = table.querySelector('thead'), tbody = table.querySelector('tbody');
+    thead.textContent = ''; tbody.textContent = '';
+    var u = unitOf();
+    var results = SCENARIOS.map(function (sc) {
+      var q = {}; for (var k in p) q[k] = p[k];
+      var pr = PRESETS[sc.key];
+      q.tempF = pr.temp; q.altitudeFt = pr.alt; q.humidityPct = pr.rh; q.pressureInHg = null; q.windMph = 0; q.inclineDeg = 0; q.stepYd = 100;
+      return window.Ballistics.solve(q);
+    });
+    var hr = document.createElement('tr');
+    var th0 = document.createElement('th'); th0.textContent = 'Yards'; hr.appendChild(th0);
+    SCENARIOS.forEach(function (sc, i) {
+      var th = document.createElement('th'); th.textContent = sc.short + ' ' + u;
+      var small = document.createElement('div'); small.textContent = sc.sub + ' · DA ' + fmt(Math.round(results[i].atmo.densityAltitudeFt / 100) * 100, 0) + ' ft';
+      small.style.fontWeight = '400'; small.style.textTransform = 'none'; small.style.letterSpacing = '0';
+      th.appendChild(small); hr.appendChild(th);
+    });
+    thead.appendChild(hr);
+    for (var d = 200; d <= 1000; d += 100) {
+      var tr = document.createElement('tr'); if (d % 200 === 0) tr.className = 'h';
+      var td0 = document.createElement('td'); td0.textContent = fmt(d, 0); tr.appendChild(td0);
+      var base = at(results[0].rows, d);
+      results.forEach(function (res, i) {
+        var r = at(res.rows, d), td = document.createElement('td');
+        td.textContent = holdOf(r.dropMil, r.dropMoa);
+        if (i === 0) td.className = 'mil';
+        else {
+          var delta = u === 'MIL' ? r.dropMil - base.dropMil : r.dropMoa - base.dropMoa;
+          var span = document.createElement('span'); span.textContent = '  (' + (delta <= 0 ? '−' : '+') + (u === 'MIL' ? Math.abs(delta).toFixed(1) : Math.abs(delta).toFixed(2)) + ')';
+          span.style.color = 'var(--muted)'; td.appendChild(span);
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    }
+    $('scen-note').textContent = 'Holds in ' + u + ' for the current rifle inputs (muzzle velocity ' + fmt(p.mvFps, 0) + ' fps, sight height ' + fmt(p.sightHeightIn, 2) + ' in). Parentheses show the change from the zero day.';
   }
 
   function renderAtmo(out, p) {
@@ -436,10 +573,10 @@ a { color: var(--accent); }
       var r = at(rows, yd); if (!r) return;
       var d = document.createElement('div'); d.className = 'hold';
       var a = document.createElement('div'); a.className = 'd'; a.textContent = yd + ' yd';
-      var v = document.createElement('div'); v.className = 'v'; v.textContent = mil1(r.dropMil);
-      var s = document.createElement('small'); s.textContent = 'MIL'; v.appendChild(s);
+      var v = document.createElement('div'); v.className = 'v'; v.textContent = holdOf(r.dropMil, r.dropMoa);
+      var s = document.createElement('small'); s.textContent = unitOf(); v.appendChild(s);
       var sub = document.createElement('div'); sub.className = 's';
-      sub.textContent = fmt(Math.abs(r.dropIn), 1) + ' in · wind ' + mil1(r.windMil) + ' · ' + fmt(Math.round(r.velocityFps), 0) + ' fps';
+      sub.textContent = fmt(Math.abs(r.dropIn), 1) + ' in · wind ' + holdOf(r.windMil, r.windMoa) + ' · ' + fmt(Math.round(r.velocityFps), 0) + ' fps';
       d.appendChild(a); d.appendChild(v); d.appendChild(sub); host.appendChild(d);
     });
   }
@@ -494,7 +631,6 @@ a { color: var(--accent); }
     var css = getComputedStyle(document.documentElement);
     var ink = css.getPropertyValue('--ink-2').trim(), muted = css.getPropertyValue('--muted').trim(), line = css.getPropertyValue('--line').trim(), axis = css.getPropertyValue('--axis').trim();
     var surface = css.getPropertyValue('--surface').trim(), accent = css.getPropertyValue('--accent').trim(), s2 = css.getPropertyValue('--series-2').trim();
-    // gridlines
     for (var v = y0; v <= y1 + 1e-9; v += yStep) {
       mk('line', { x1: m.l, x2: m.l + iw, y1: y(v), y2: y(v), stroke: v === 0 ? axis : line, 'stroke-width': 1 }, svg);
       var t = mk('text', { x: m.l - 8, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, 'font-family': 'IBM Plex Mono, monospace', fill: muted }, svg);
@@ -510,7 +646,6 @@ a { color: var(--accent); }
     var losLabel = mk('text', { x: m.l + 8, y: y(0) - 6, 'font-size': 11, 'font-family': 'IBM Plex Sans, sans-serif', fill: ink }, svg);
     losLabel.textContent = 'line of sight';
     var path = function (rs) { return rs.map(function (r, i) { return (i ? 'L' : 'M') + x(r.yd).toFixed(1) + ' ' + y(r.dropIn).toFixed(1); }).join(' '); };
-    // area wash under the active series, between path and LOS
     var areaD = path(rows) + ' L' + x(rows[rows.length - 1].yd).toFixed(1) + ' ' + y(0).toFixed(1) + ' L' + x(rows[0].yd).toFixed(1) + ' ' + y(0).toFixed(1) + ' Z';
     mk('path', { d: areaD, fill: accent, 'fill-opacity': 0.08, stroke: 'none' }, svg);
     if (ref) mk('path', { d: path(ref), fill: 'none', stroke: s2, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
@@ -523,16 +658,14 @@ a { color: var(--accent); }
     var last = rows[rows.length - 1];
     var endLabel = mk('text', { x: x(last.yd) + 8, y: y(last.dropIn) + 4, 'font-size': 12, 'font-weight': 600, 'font-family': 'IBM Plex Mono, monospace', fill: ink }, svg);
     endLabel.textContent = fmt(last.dropIn, 0) + ' in';
-    // crosshair layer
     var cross = mk('line', { x1: 0, x2: 0, y1: m.t, y2: m.t + ih, stroke: axis, 'stroke-width': 1, visibility: 'hidden' }, svg);
     var dot = mk('circle', { r: 5, fill: accent, stroke: surface, 'stroke-width': 2, visibility: 'hidden' }, svg);
     var dot2 = mk('circle', { r: 5, fill: s2, stroke: surface, 'stroke-width': 2, visibility: 'hidden' }, svg);
     mk('rect', { x: m.l, y: m.t, width: iw, height: ih, fill: 'transparent' }, svg);
     chartGeom = { x: x, y: y, m: m, iw: iw, W: W, cross: cross, dot: dot, dot2: dot2 };
-    // legend
     var lg = $('legend'); lg.textContent = '';
     var a = document.createElement('span'); a.style.setProperty('--c', 'var(--accent)'); a.textContent = 'Current conditions'; lg.appendChild(a);
-    if (ref) { var b = document.createElement('span'); b.style.setProperty('--c', 'var(--series-2)'); b.textContent = 'Zero day (75°F, 1,100 ft)'; lg.appendChild(b); }
+    if (ref) { var b = document.createElement('span'); b.style.setProperty('--c', 'var(--series-2)'); b.textContent = 'Zero day (85°F, 1,100 ft)'; lg.appendChild(b); }
   }
   function hideTip() { var t = $('tip'); t.style.display = 'none'; if (chartGeom) { chartGeom.cross.setAttribute('visibility', 'hidden'); chartGeom.dot.setAttribute('visibility', 'hidden'); chartGeom.dot2.setAttribute('visibility', 'hidden'); } }
   function showTip(clientX) {
@@ -551,10 +684,11 @@ a { color: var(--accent); }
       var s = document.createElement('span'); var b = document.createElement('b'); b.textContent = strong; s.appendChild(b); s.appendChild(document.createTextNode(' ' + text));
       d.appendChild(i); d.appendChild(s); tip.appendChild(d);
     };
-    row('var(--accent)', 'MIL · ' + fmt(r.dropIn, 1) + ' in · ' + fmt(Math.round(r.velocityFps), 0) + ' fps · ' + r.tofS.toFixed(2) + ' s', mil1(r.dropMil));
+    var u = unitOf();
+    row('var(--accent)', u + ' · ' + fmt(r.dropIn, 1) + ' in · ' + fmt(Math.round(r.velocityFps), 0) + ' fps · ' + r.tofS.toFixed(2) + ' s', holdOf(r.dropMil, r.dropMoa));
     if (state.ref) {
       var q = at(state.ref, yd);
-      if (q) { row('var(--series-2)', 'MIL · ' + fmt(q.dropIn, 1) + ' in (zero day)', mil1(q.dropMil)); g.dot2.setAttribute('cx', g.x(yd)); g.dot2.setAttribute('cy', g.y(q.dropIn)); g.dot2.setAttribute('visibility', 'visible'); }
+      if (q) { row('var(--series-2)', u + ' · ' + fmt(q.dropIn, 1) + ' in (zero day)', holdOf(q.dropMil, q.dropMoa)); g.dot2.setAttribute('cx', g.x(yd)); g.dot2.setAttribute('cy', g.y(q.dropIn)); g.dot2.setAttribute('visibility', 'visible'); }
     }
     tip.style.display = 'block';
     var left = g.x(yd) * scale + 14, tw = tip.offsetWidth;
@@ -574,35 +708,40 @@ a { color: var(--accent); }
     host.addEventListener('blur', hideTip);
   })();
 
-  // ---- Mil scale ----
-  function renderReticle(rows) {
+  // ---- Turret-unit holdover scale ----
+  function renderScale(rows) {
     var svg = $('reticle'); svg.textContent = '';
+    var u = unitOf(), isMil = u === 'MIL';
+    var val = function (r) { return isMil ? r.dropMil : r.dropMoa; };
     var W = 220, H = 440, top = 24, bottom = 20, cx = 70;
-    var last = at(rows, 1000), maxMil = Math.max(8, Math.ceil((last ? last.dropMil : 8) + 0.5));
-    var ih = H - top - bottom, y = function (mil) { return top + (mil / maxMil) * ih; };
+    var last = at(rows, 1000);
+    var maxV = isMil ? Math.max(8, Math.ceil((last ? val(last) : 8) + 0.5)) : Math.max(25, Math.ceil(((last ? val(last) : 25) + 1) / 5) * 5);
+    var minor = isMil ? 0.2 : 0.5, mid = isMil ? 0.5 : 1, major = isMil ? 1 : 5;
+    var ih = H - top - bottom, y = function (v) { return top + (v / maxV) * ih; };
     svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
     var css = getComputedStyle(document.documentElement);
     var ink = css.getPropertyValue('--ink').trim(), ink2 = css.getPropertyValue('--ink-2').trim(), muted = css.getPropertyValue('--muted').trim(), accent = css.getPropertyValue('--accent').trim(), surface = css.getPropertyValue('--surface').trim();
     mk('line', { x1: cx, x2: cx, y1: top - 10, y2: top + ih + 6, stroke: ink2, 'stroke-width': 1.5 }, svg);
     mk('line', { x1: cx - 28, x2: cx + 28, y1: y(0), y2: y(0), stroke: ink2, 'stroke-width': 1.5 }, svg);
     mk('circle', { cx: cx, cy: y(0), r: 2.2, fill: ink2 }, svg);
-    for (var m = 0.2; m <= maxMil + 1e-9; m = Math.round((m + 0.2) * 10) / 10) {
-      var whole = Math.abs(m - Math.round(m)) < 1e-6, half = Math.abs(m * 2 - Math.round(m * 2)) < 1e-6;
-      var half_w = whole ? 12 : half ? 7 : 3.5;
-      mk('line', { x1: cx - half_w, x2: cx + half_w, y1: y(m), y2: y(m), stroke: ink2, 'stroke-width': whole ? 1.5 : 1 }, svg);
-      if (whole) { var t = mk('text', { x: cx - 18, y: y(m) + 4, 'text-anchor': 'end', 'font-size': 11, 'font-family': 'IBM Plex Mono, monospace', fill: muted }, svg); t.textContent = String(Math.round(m)); }
+    var near = function (a, b) { return Math.abs(a / b - Math.round(a / b)) < 1e-6; };
+    for (var m = minor; m <= maxV + 1e-9; m = Math.round((m + minor) * 100) / 100) {
+      var isMajor = near(m, major), isMid = near(m, mid);
+      var half_w = isMajor ? 12 : isMid ? 7 : 3.5;
+      mk('line', { x1: cx - half_w, x2: cx + half_w, y1: y(m), y2: y(m), stroke: ink2, 'stroke-width': isMajor ? 1.5 : 1 }, svg);
+      if (isMajor) { var t = mk('text', { x: cx - 18, y: y(m) + 4, 'text-anchor': 'end', 'font-size': 11, 'font-family': 'IBM Plex Mono, monospace', fill: muted }, svg); t.textContent = String(Math.round(m)); }
     }
     var lastY = -Infinity;
     for (var d = 200; d <= 1000; d += 100) {
-      var r = at(rows, d); if (!r || r.dropMil > maxMil || r.dropMil < 0) continue;
-      var yy = y(r.dropMil), ly = Math.max(yy, lastY + 13);
+      var r = at(rows, d); if (!r || val(r) > maxV || val(r) < 0) continue;
+      var yy = y(val(r)), ly = Math.max(yy, lastY + 13);
       mk('circle', { cx: cx, cy: yy, r: 5.5, fill: surface }, svg);
       mk('circle', { cx: cx, cy: yy, r: 3.5, fill: accent }, svg);
       mk('line', { x1: cx + 10, x2: cx + 34, y1: yy, y2: ly, stroke: accent, 'stroke-width': 1 }, svg);
       var lab = mk('text', { x: cx + 40, y: ly + 4, 'font-size': 12, 'font-family': 'IBM Plex Mono, monospace', 'font-weight': 600, fill: ink }, svg);
       lab.textContent = d + ' yd';
       var lab2 = mk('text', { x: cx + 100, y: ly + 4, 'font-size': 12, 'font-family': 'IBM Plex Mono, monospace', fill: ink2 }, svg);
-      lab2.textContent = mil1(r.dropMil);
+      lab2.textContent = holdOf(r.dropMil, r.dropMoa);
       lastY = ly;
     }
     var cap = mk('text', { x: cx - 18, y: y(0) + 4, 'text-anchor': 'end', 'font-size': 11, 'font-family': 'IBM Plex Mono, monospace', fill: muted }, svg);
@@ -613,17 +752,21 @@ a { color: var(--accent); }
   function renderTable(rows, p) {
     var tb = document.querySelector('#dope tbody'); tb.textContent = '';
     var step = parseInt(el.step.value, 10) || 50;
-    $('windhead').textContent = 'Wind ' + fmt(p.windMph, 0) + ' mph MIL';
+    var u = unitOf(), isMil = u === 'MIL';
+    $('windhead').textContent = 'Wind ' + fmt(p.windMph, 0) + ' mph ' + u;
+    var ths = document.querySelectorAll('#dope thead th');
+    ths[2].className = isMil ? 'mil' : ''; ths[3].className = isMil ? '' : 'mil';
     var cell = function (tr, text, cls) { var td = document.createElement('td'); td.textContent = text; if (cls) td.className = cls; tr.appendChild(td); return td; };
     for (var d = step; d <= 1000; d += step) {
       var r = at(rows, d); if (!r) continue;
       var tr = document.createElement('tr'); if (d % 100 === 0) tr.className = 'h';
       cell(tr, fmt(d, 0));
       cell(tr, (r.dropIn > 0 ? '+' : '') + fmt(r.dropIn, 1));
-      cell(tr, mil1(r.dropMil), 'mil');
-      cell(tr, fmt(r.dropMoa, 2));
-      cell(tr, mil1(r.windMil));
-      cell(tr, r.driftMil < 0.05 ? '—' : mil1(r.driftMil) + ' L');
+      cell(tr, mil1(r.dropMil), isMil ? 'mil' : '');
+      cell(tr, moa4(r.dropMoa), isMil ? '' : 'mil');
+      cell(tr, holdOf(r.windMil, r.windMoa));
+      var drift = isMil ? r.driftMil : r.driftMil * 3.4377467707849396;
+      cell(tr, drift < (isMil ? 0.05 : 0.125) ? '—' : holdOf(r.driftMil, drift) + ' L');
       cell(tr, fmt(Math.round(r.velocityFps), 0));
       cell(tr, fmt(Math.round(r.energyFtLb), 0));
       cell(tr, r.tofS.toFixed(3));
@@ -634,9 +777,10 @@ a { color: var(--accent); }
 
   var ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(function () { if (state.rows.length) renderChart(); }) : null;
   if (ro) ro.observe($('chart'));
-  if (window.matchMedia) { var mq = window.matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', function () { if (state.rows.length) { renderChart(); renderReticle(state.rows); } }); }
-  new MutationObserver(function () { if (state.rows.length) { renderChart(); renderReticle(state.rows); } }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  if (window.matchMedia) { var mq = window.matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', function () { if (state.rows.length) { renderChart(); renderScale(state.rows); } }); }
+  new MutationObserver(function () { if (state.rows.length) { renderChart(); renderScale(state.rows); } }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (state.rows.length) renderChart(); });
+  applyRifle('cross');
   render();
 })();
 </script>
