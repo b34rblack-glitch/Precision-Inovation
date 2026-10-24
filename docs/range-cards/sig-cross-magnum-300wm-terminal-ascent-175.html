@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CROSS Magnum 175 TA Dope</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a field data card. One header band with the rifle system, one row of
+   condition controls, then holds as big figures, the path chart beside a mil
+   holdover scale, and the full dope table. Data in mono, headings condensed. */
+:root {
+  --bg: #f4f5f2;
+  --surface: #fcfcfb;
+  --surface-2: #eceeea;
+  --ink: #141614;
+  --ink-2: #4e544f;
+  --muted: #878c87;
+  --line: #dfe2dc;
+  --axis: #c3c6c0;
+  --accent: #2a78d6;
+  --accent-soft: rgba(42, 120, 214, 0.10);
+  --series-2: #eb6834;
+  --warn: #9a5b00;
+  --warn-bg: #fff4dc;
+  --focus: #2a78d6;
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111312; --surface: #1a1c1a; --surface-2: #232624;
+    --ink: #eceeea; --ink-2: #bfc4be; --muted: #8b908b;
+    --line: #2b2e2c; --axis: #3b3f3c;
+    --accent: #3987e5; --accent-soft: rgba(57, 135, 229, 0.16);
+    --series-2: #d95926; --warn: #f0b24a; --warn-bg: #2a2416; --focus: #3987e5;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111312; --surface: #1a1c1a; --surface-2: #232624;
+  --ink: #eceeea; --ink-2: #bfc4be; --muted: #8b908b;
+  --line: #2b2e2c; --axis: #3b3f3c;
+  --accent: #3987e5; --accent-soft: rgba(57, 135, 229, 0.16);
+  --series-2: #d95926; --warn: #f0b24a; --warn-bg: #2a2416; --focus: #3987e5;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 15px; line-height: 1.45;
+  padding-block: 0 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+.wrap > * { min-width: 0; }
+h1, h2, h3 { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.005em; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); line-height: 1.02; text-transform: uppercase; }
+h2 { font-size: 22px; line-height: 1.1; }
+.eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* Header band */
+header { padding-top: 28px; border-bottom: 2px solid var(--ink); padding-bottom: 18px; display: grid; gap: 14px; }
+.system { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px 24px; }
+.system div { min-width: 0; border-top: 1px solid var(--line); padding-top: 8px; }
+.system .eyebrow { display: block; margin-bottom: 2px; }
+.system b { font-weight: 500; color: var(--ink); }
+.system small { color: var(--ink-2); display: block; font-size: 13px; }
+
+/* Controls */
+.controls { display: grid; gap: 12px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font: 500 14px var(--font-body); color: var(--ink-2); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 999px; padding: 7px 14px; cursor: pointer;
+}
+.chip[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); background: var(--surface-2); }
+.chip:focus-visible, input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field label { font-size: 12px; color: var(--ink-2); }
+.field input, .field select {
+  width: 100%; font: 500 15px var(--font-mono); color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font-variant-numeric: tabular-nums;
+}
+.field .unit { font-size: 11px; color: var(--muted); }
+.note { font-size: 13px; color: var(--ink-2); max-width: 70ch; }
+
+/* Holds row */
+.holds { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 2px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.hold { background: var(--surface); padding: 12px 12px 10px; min-width: 0; }
+.hold .d { font-family: var(--font-display); font-size: 15px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-2); }
+.hold .v { font-family: var(--font-display); font-size: 44px; line-height: 1; font-weight: 600; margin-top: 2px; color: var(--ink); }
+.hold .v small { font-size: 16px; color: var(--muted); font-weight: 500; margin-left: 2px; }
+.hold .s { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 20px; }
+.stat { border-top: 1px solid var(--line); padding-top: 8px; }
+.stat .v { font-family: var(--font-display); font-size: 26px; font-weight: 600; line-height: 1.1; }
+.stat .v small { font-size: 14px; color: var(--muted); font-weight: 500; }
+.stat .l { font-size: 12.5px; color: var(--ink-2); }
+
+/* Charts */
+.row2 { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 16px; align-items: stretch; }
+@media (max-width: 760px) { .row2 { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px 12px; min-width: 0; }
+.card-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12.5px; color: var(--ink-2); }
+.legend span::before { content: ""; display: inline-block; width: 18px; height: 0; border-top: 2px solid var(--c); vertical-align: middle; margin-right: 6px; border-radius: 2px; }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; }
+.tip {
+  position: absolute; top: 8px; left: 8px; pointer-events: none; display: none;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px;
+  font-size: 12.5px; color: var(--ink-2); box-shadow: 0 4px 14px rgba(0,0,0,0.10); min-width: 150px;
+}
+.tip .t { font-family: var(--font-mono); font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+.tip .r { display: grid; grid-template-columns: 18px 1fr; gap: 6px; align-items: center; }
+.tip .r i { height: 0; border-top: 2px solid var(--c); border-radius: 2px; }
+.tip .r b { font-family: var(--font-mono); font-weight: 600; color: var(--ink); }
+.ret { display: grid; gap: 6px; }
+.ret svg { width: 100%; max-width: 240px; height: auto; display: block; margin: 0 auto; }
+
+/* Table */
+.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13.5px; }
+th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-family: var(--font-body); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); position: sticky; top: 0; background: var(--surface); }
+th:first-child, td:first-child { text-align: left; padding-left: 14px; }
+td:first-child { font-weight: 600; }
+td.mil { font-weight: 600; color: var(--ink); }
+tr.h td { background: var(--surface-2); }
+tr.sub td { color: var(--muted); }
+tbody tr:last-child td { border-bottom: 0; }
+.tfoot { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: var(--ink-2); padding: 8px 2px 0; }
+
+/* Notes */
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px 32px; }
+.notes ul { margin: 6px 0 0; padding-left: 18px; }
+.notes li { margin: 4px 0; max-width: 62ch; }
+.notes li + li { margin-top: 6px; }
+.callout { background: var(--warn-bg); color: var(--ink); border-left: 3px solid var(--warn); padding: 10px 14px; border-radius: 0 6px 6px 0; font-size: 14px; max-width: 78ch; }
+a { color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) { .chip, .field input { transition: border-color .15s; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <span class="eyebrow">Range card · 100 yd zero · Phoenix, AZ</span>
+    <h1>SIG CROSS Magnum · .300 Win Mag<br>Federal Terminal Ascent 175 gr</h1>
+  </div>
+  <div class="system">
+    <div><span class="eyebrow">Rifle</span><b>SIG SAUER CROSS Magnum</b><small>24 in 5R stainless, 1:9 RH twist, 5/8×24</small></div>
+    <div><span class="eyebrow">Ammunition</span><b>Federal Premium Terminal Ascent 175 gr</b><small>P300WTA2 · 3,030 fps published · G7 .258 / G1 .520</small></div>
+    <div><span class="eyebrow">Optic</span><b>Leupold Mark 4HD 4.5-18×52</b><small>34 mm, FFP illuminated PR1-MIL, 0.1 MIL clicks</small></div>
+    <div><span class="eyebrow">Mount</span><b>SIG ALPHA6 34 mm extra-high rings</b><small>1.25 in rail-to-centerline · est. 2.1 in over bore</small></div>
+  </div>
+</header>
+
+<section class="controls" aria-label="Conditions">
+  <div class="chips" role="group" aria-label="Condition presets">
+    <button class="chip" type="button" data-preset="phx" aria-pressed="true">Phoenix, mild day · 75°F</button>
+    <button class="chip" type="button" data-preset="phx-hot" aria-pressed="false">Phoenix, summer · 105°F</button>
+    <button class="chip" type="button" data-preset="rim" aria-pressed="false">Mogollon Rim · 6,500 ft · 45°F</button>
+    <button class="chip" type="button" data-preset="winter" aria-pressed="false">Phoenix, winter dawn · 40°F</button>
+  </div>
+  <div class="fields">
+    <div class="field"><label for="temp">Temperature</label><input id="temp" type="number" step="1" value="75"><span class="unit">°F</span></div>
+    <div class="field"><label for="alt">Elevation</label><input id="alt" type="number" step="100" value="1100"><span class="unit">ft (sets pressure)</span></div>
+    <div class="field"><label for="press">Station pressure</label><input id="press" type="number" step="0.01" placeholder="auto"><span class="unit">inHg, blank = from elevation</span></div>
+    <div class="field"><label for="rh">Humidity</label><input id="rh" type="number" step="5" min="0" max="100" value="20"><span class="unit">%</span></div>
+    <div class="field"><label for="mv">Muzzle velocity</label><input id="mv" type="number" step="5" value="3030"><span class="unit">fps · replace with chrono</span></div>
+    <div class="field"><label for="bc">BC (G7)</label><input id="bc" type="number" step="0.001" value="0.258"><span class="unit">lb/in²</span></div>
+    <div class="field"><label for="sh">Sight height</label><input id="sh" type="number" step="0.05" value="2.1"><span class="unit">in over bore</span></div>
+    <div class="field"><label for="zero">Zero</label><input id="zero" type="number" step="25" value="100"><span class="unit">yd</span></div>
+    <div class="field"><label for="wind">Crosswind</label><input id="wind" type="number" step="1" value="10"><span class="unit">mph, full value</span></div>
+    <div class="field"><label for="incl">Incline</label><input id="incl" type="number" step="5" value="0"><span class="unit">° (uphill +)</span></div>
+    <div class="field"><label for="step">Table step</label><select id="step"><option value="25">25 yd</option><option value="50" selected>50 yd</option><option value="100">100 yd</option></select><span class="unit">to 1,000 yd</span></div>
+  </div>
+  <p class="note" id="atmoline"></p>
+</section>
+
+<section aria-label="Holds">
+  <div class="holds" id="holds"></div>
+  <div class="stats" id="stats"></div>
+</section>
+
+<section class="row2" aria-label="Charts">
+  <div class="card chart-card">
+    <div class="card-head">
+      <h2>Bullet path vs line of sight</h2>
+      <div class="legend" id="legend"></div>
+    </div>
+    <div class="chart" id="chart"><svg aria-labelledby="chart-title" role="img"><title id="chart-title">Bullet path in inches below the line of sight, by distance</title></svg><div class="tip" id="tip"></div></div>
+  </div>
+  <div class="card ret">
+    <h2>Holdover on the mil scale</h2>
+    <span class="note">Center is the 100 yd zero. FFP reticle, so these holds are true at any magnification.</span>
+    <svg id="reticle" role="img" aria-label="Mil scale with the holdover for each 100 yards"></svg>
+  </div>
+</section>
+
+<section aria-label="Dope table">
+  <div class="card-head"><h2>Dope table</h2><span class="note">Elev MIL is rounded to the 0.1 MIL click. Drift is spin drift only; hold the direction shown.</span></div>
+  <div class="tablewrap"><table id="dope">
+    <thead><tr>
+      <th>Yards</th><th>Path in</th><th>Elev MIL</th><th>Elev MOA</th><th id="windhead">Wind MIL</th><th>Drift</th><th>fps</th><th>ft·lb</th><th>TOF s</th><th>Mach</th>
+    </tr></thead>
+    <tbody></tbody>
+  </table></div>
+  <div class="tfoot"><span>Path: negative = bullet below line of sight.</span><span>Elev: dial up or hold over.</span><span>Wind: full-value hold for the crosswind set above; halve it for a 45° wind.</span></div>
+</section>
+
+<section class="notes" aria-label="Notes">
+  <div>
+    <h2>Before you trust it</h2>
+    <ul>
+      <li><b>Chronograph the load.</b> 3,030 fps is Federal's 24 in test-barrel number. Your CROSS also has a 24 in barrel, but individual rifles commonly run 20 to 60 fps off. Type the real average into Muzzle velocity.</li>
+      <li><b>Measure sight height.</b> 2.1 in is 1.25 in (ALPHA6 extra-high, rail top to optic centerline, per SIG) plus about 0.85 in from bore center to the top of the CROSS's integral rail, which is an estimate. Measure bore center to scope-tube center and enter it. Each 0.1 in only moves the 1,000 yd hold about 0.03 MIL, so this is a small term.</li>
+      <li><b>True it at distance.</b> Confirm the 100 yd zero in the conditions you zeroed, then shoot 500 to 600 yd on a known target. If impacts are high or low, adjust Muzzle velocity until the predicted hold matches, then re-check 800 or beyond.</li>
+      <li><b>Temperature.</b> The condition presets change air density only. They do not change powder speed, because Federal does not publish the load's temperature sensitivity. If your summer and winter chrono numbers differ, enter each.</li>
+    </ul>
+  </div>
+  <div>
+    <h2>Model</h2>
+    <ul>
+      <li>Point-mass RK4 solver with the McCoy G7 reference drag curve, ICAO atmosphere with humidity, the same engine as the Precision Innovation app. Zero is solved on flat ground; incline rotates gravity for the shot only.</li>
+      <li>Spin drift uses the Miller stability factor and Litz's approximation for a 1.466 in, 175 gr bullet in a 1:9 right-hand twist. Coriolis and aerodynamic jump are not included; both are under 0.1 MIL inside 800 yd for this load.</li>
+      <li>The hold tiles and the table round to 0.1 MIL, the Mark 4HD's click value. The chart and tooltip use unrounded values.</li>
+      <li>Published figures: Federal lists P300WTA2 at 3,030 fps with a G7 BC of .258 and a 175 gr Terminal Ascent bullet 1.466 in long. SIG lists the CROSS Magnum with a 24 in 1:9 barrel and the ALPHA6 extra-high rings at 1.25 in.</li>
+    </ul>
+    <p class="callout">This is a prediction, not a confirmation. Mark confirmed holds on the printed card and let them override the table.</p>
+  </div>
+</section>
+</div>
+
+<script id="solver">
+// Pure point-mass solver, a direct port of src/lib/ballistics in the
+// Precision Innovation repo (RK4, McCoy G7 table, ICAO atmosphere, Newton zero,
+// Miller/Litz spin drift). Everything here is SI inside, shooter units outside.
+(function (root) {
+  'use strict';
+  var G7 = [[0,0.1198],[0.05,0.1197],[0.1,0.1196],[0.15,0.1194],[0.2,0.1193],[0.25,0.1194],[0.3,0.1194],[0.35,0.1194],[0.4,0.1193],[0.45,0.1193],[0.5,0.1194],[0.55,0.1193],[0.6,0.1194],[0.65,0.1197],[0.7,0.1202],[0.725,0.1207],[0.75,0.1215],[0.775,0.1226],[0.8,0.1242],[0.825,0.1266],[0.85,0.1306],[0.875,0.1368],[0.9,0.1464],[0.925,0.166],[0.95,0.2054],[0.975,0.2993],[1,0.3803],[1.025,0.4015],[1.05,0.4043],[1.075,0.4034],[1.1,0.4014],[1.125,0.3987],[1.15,0.3955],[1.2,0.3884],[1.25,0.381],[1.3,0.3732],[1.35,0.3657],[1.4,0.358],[1.5,0.344],[1.55,0.3376],[1.6,0.3315],[1.65,0.326],[1.7,0.3209],[1.75,0.316],[1.8,0.3117],[1.85,0.3078],[1.9,0.3042],[1.95,0.301],[2,0.298],[2.05,0.2951],[2.1,0.2922],[2.15,0.2892],[2.2,0.2864],[2.25,0.2835],[2.3,0.2807],[2.35,0.2779],[2.4,0.2752],[2.45,0.2725],[2.5,0.2697],[2.55,0.267],[2.6,0.2643],[2.65,0.2615],[2.7,0.2588],[2.75,0.2561],[2.8,0.2533],[2.85,0.2506],[2.9,0.2479],[2.95,0.2451],[3,0.2424],[3.1,0.2368],[3.2,0.2313],[3.3,0.2258],[3.4,0.2205],[3.5,0.2154],[3.6,0.2106],[3.7,0.206],[3.8,0.2017],[3.9,0.1975],[4,0.1935],[4.2,0.1861],[4.4,0.1793],[4.6,0.173],[4.8,0.1672],[5,0.1618]];
+  var KG_M2_PER_LB_IN2 = 703.06958, G = 9.80665, DT = 0.001, STD_RHO = 1.225;
+  var fps2mps = function (f) { return f * 0.3048; }, in2m = function (i) { return i * 0.0254; };
+  var yd2m = function (y) { return y * 0.9144; }, m2in = function (m) { return m / 0.0254; };
+  var MOA_PER_MIL = 3.4377467707849396;
+
+  function cd(mach) {
+    if (mach <= G7[0][0]) return G7[0][1];
+    var last = G7[G7.length - 1];
+    if (mach >= last[0]) return last[1];
+    var lo = 0, hi = G7.length - 1;
+    while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (G7[mid][0] <= mach) lo = mid; else hi = mid; }
+    var a = G7[lo], b = G7[hi];
+    return a[1] + ((b[1] - a[1]) * (mach - a[0])) / (b[0] - a[0]);
+  }
+  function icaoPa(altFt) {
+    var h = altFt * 0.3048;
+    return 101325 * Math.pow(1 - (0.0065 * h) / 288.15, G / (287.058 * 0.0065));
+  }
+  function atmosphere(a) {
+    var tempK = ((a.tempF - 32) * 5) / 9 + 273.15, tempC = tempK - 273.15;
+    var pPa = a.pressureInHg != null ? a.pressureInHg * 3386.389 : icaoPa(a.altitudeFt != null ? a.altitudeFt : 0);
+    var rh = Math.min(Math.max(a.humidityPct || 0, 0), 100) / 100;
+    var vapor = rh * 610.78 * Math.pow(10, (7.5 * tempC) / (tempC + 237.3));
+    var rho = (pPa - vapor) / (287.058 * tempK) + vapor / (461.495 * tempK);
+    return { densityKgM3: rho, speedOfSoundMps: Math.sqrt(1.4 * (pPa / rho)), pressureInHg: pPa / 3386.389,
+      densityAltitudeFt: 145442.16 * (1 - Math.pow(rho / STD_RHO, 0.234969)) };
+  }
+  function accel(v, env) {
+    var rz = v.z - env.windMps, speed = Math.sqrt(v.x * v.x + v.y * v.y + rz * rz);
+    if (speed === 0) return { x: -env.gAlong, y: -env.gPerp, z: 0 };
+    var decel = (Math.PI / 8) * env.rho * speed * speed * (cd(speed / env.sos) / env.bcKgM2);
+    var k = decel / speed;
+    return { x: -k * v.x - env.gAlong, y: -k * v.y - env.gPerp, z: -k * rz };
+  }
+  function rk4(s, env, dt) {
+    var p = s.pos, v = s.vel, a1 = accel(v, env);
+    var v2 = { x: v.x + a1.x * dt / 2, y: v.y + a1.y * dt / 2, z: v.z + a1.z * dt / 2 }, a2 = accel(v2, env);
+    var v3 = { x: v.x + a2.x * dt / 2, y: v.y + a2.y * dt / 2, z: v.z + a2.z * dt / 2 }, a3 = accel(v3, env);
+    var v4 = { x: v.x + a3.x * dt, y: v.y + a3.y * dt, z: v.z + a3.z * dt }, a4 = accel(v4, env);
+    return {
+      pos: { x: p.x + dt / 6 * (v.x + 2 * v2.x + 2 * v3.x + v4.x), y: p.y + dt / 6 * (v.y + 2 * v2.y + 2 * v3.y + v4.y), z: p.z + dt / 6 * (v.z + 2 * v2.z + 2 * v3.z + v4.z) },
+      vel: { x: v.x + dt / 6 * (a1.x + 2 * a2.x + 2 * a3.x + a4.x), y: v.y + dt / 6 * (a1.y + 2 * a2.y + 2 * a3.y + a4.y), z: v.z + dt / 6 * (a1.z + 2 * a2.z + 2 * a3.z + a4.z) }
+    };
+  }
+  function integrate(angle, mv, startY, env, xs) {
+    var s = { pos: { x: 0, y: startY, z: 0 }, vel: { x: mv * Math.cos(angle), y: mv * Math.sin(angle), z: 0 } };
+    var tof = 0, out = [], si = 0, maxX = xs.length ? xs[xs.length - 1] : 0;
+    while (si < xs.length && tof < 20) {
+      var prev = s, prevTof = tof;
+      s = rk4(s, env, DT); tof += DT;
+      while (si < xs.length && s.pos.x >= xs[si]) {
+        var t = xs[si], f = (t - prev.pos.x) / (s.pos.x - prev.pos.x || 1);
+        var L = function (a, b) { return a + (b - a) * f; };
+        var vx = L(prev.vel.x, s.vel.x), vy = L(prev.vel.y, s.vel.y), vz = L(prev.vel.z, s.vel.z);
+        out.push({ xM: t, yM: L(prev.pos.y, s.pos.y), zM: L(prev.pos.z, s.pos.z), speed: Math.sqrt(vx * vx + vy * vy + vz * vz), tof: L(prevTof, tof) });
+        si++;
+      }
+      if (s.pos.x > maxX + 1) break;
+      if (s.pos.y < -1000) break;
+    }
+    return out;
+  }
+  function zeroAngle(mv, startY, zeroM, env) {
+    if (zeroM <= 0) return 0;
+    var angle = 0.001;
+    for (var i = 0; i < 5; i++) {
+      var r = integrate(angle, mv, startY, env, [zeroM]);
+      if (!r.length) break;
+      if (Math.abs(r[0].yM) < 0.0005) break;
+      angle += Math.atan2(-r[0].yM, zeroM);
+    }
+    return angle;
+  }
+  /**
+   * p: { mvFps, bcG7, zeroYd, sightHeightIn, tempF, pressureInHg|null, altitudeFt,
+   *      humidityPct, windMph, inclineDeg, maxYd, stepYd, weightGr, twistIn,
+   *      bulletLengthIn, bulletDiameterIn }
+   */
+  function solve(p) {
+    var atmo = atmosphere(p);
+    var incl = ((p.inclineDeg || 0) * Math.PI) / 180;
+    var env = { rho: atmo.densityKgM3, sos: atmo.speedOfSoundMps, bcKgM2: p.bcG7 * KG_M2_PER_LB_IN2,
+      windMps: (p.windMph || 0) * 0.44704, gAlong: G * Math.sin(incl), gPerp: G * Math.cos(incl) };
+    var mv = fps2mps(p.mvFps), startY = -in2m(p.sightHeightIn);
+    var flat = incl === 0 ? env : { rho: env.rho, sos: env.sos, bcKgM2: env.bcKgM2, windMps: env.windMps, gAlong: 0, gPerp: G };
+    var angle = zeroAngle(mv, startY, yd2m(p.zeroYd), flat);
+    var yds = [];
+    for (var d = p.stepYd; d <= p.maxYd + 1e-9; d += p.stepYd) yds.push(Number(d.toFixed(4)));
+    var samples = integrate(angle, mv, startY, env, yds.map(yd2m));
+    var massKg = p.weightGr * 0.00006479891;
+    // Miller Sg with Litz velocity and density corrections.
+    var dia = p.bulletDiameterIn, tw = p.twistIn / dia, l = p.bulletLengthIn / dia;
+    var sg = (30 * p.weightGr) / (tw * tw * dia * dia * dia * l * (1 + l * l)) * Math.cbrt(p.mvFps / 2800) * (STD_RHO / atmo.densityKgM3);
+    var rows = samples.map(function (s, i) {
+      var yd = yds[i], dropIn = m2in(s.yM), windIn = m2in(s.zM);
+      var driftIn = 1.25 * (sg + 1.2) * Math.pow(s.tof, 1.83); // right-hand twist drifts right
+      var toMil = function (inches) { return (inches * 1000) / (yd * 36); };
+      var dropMil = toMil(-dropIn), windMil = toMil(windIn), driftMil = toMil(driftIn);
+      var v = s.speed;
+      return { yd: yd, dropIn: dropIn, dropMil: dropMil, dropMoa: dropMil * MOA_PER_MIL, windIn: windIn, windMil: windMil, windMoa: windMil * MOA_PER_MIL,
+        driftIn: driftIn, driftMil: driftMil, velocityFps: v / 0.3048, energyFtLb: 0.5 * massKg * v * v * 0.7375621493, tofS: s.tof, mach: v / env.sos };
+    });
+    return { rows: rows, atmo: atmo, sg: sg, zeroAngleMil: angle * 1000 };
+  }
+  root.Ballistics = { solve: solve, atmosphere: atmosphere, icaoPa: icaoPa };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+
+<script>
+(function () {
+  'use strict';
+  var LOAD = { weightGr: 175, twistIn: 9, bulletLengthIn: 1.466, bulletDiameterIn: 0.308 };
+  var PRESETS = {
+    phx: { label: 'Phoenix, mild day', temp: 75, alt: 1100, rh: 20 },
+    'phx-hot': { label: 'Phoenix, summer afternoon', temp: 105, alt: 1100, rh: 10 },
+    rim: { label: 'Mogollon Rim hunt', temp: 45, alt: 6500, rh: 30 },
+    winter: { label: 'Phoenix, winter dawn', temp: 40, alt: 1100, rh: 40 }
+  };
+  var $ = function (id) { return document.getElementById(id); };
+  var el = { temp: $('temp'), alt: $('alt'), press: $('press'), rh: $('rh'), mv: $('mv'), bc: $('bc'), sh: $('sh'), zero: $('zero'), wind: $('wind'), incl: $('incl'), step: $('step') };
+  var chips = Array.prototype.slice.call(document.querySelectorAll('.chip'));
+  var num = function (input, fallback) { var v = parseFloat(input.value); return isFinite(v) ? v : fallback; };
+  var fmt = function (n, d) { return n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }); };
+  var mil1 = function (m) { return (Math.round(m * 10) / 10).toFixed(1); };
+
+  function params() {
+    var pressRaw = parseFloat(el.press.value);
+    return {
+      mvFps: num(el.mv, 3030), bcG7: num(el.bc, 0.258), zeroYd: num(el.zero, 100), sightHeightIn: num(el.sh, 2.1),
+      tempF: num(el.temp, 75), pressureInHg: isFinite(pressRaw) ? pressRaw : null, altitudeFt: num(el.alt, 1100), humidityPct: num(el.rh, 20),
+      windMph: num(el.wind, 10), inclineDeg: num(el.incl, 0), maxYd: 1000, stepYd: 5,
+      weightGr: LOAD.weightGr, twistIn: LOAD.twistIn, bulletLengthIn: LOAD.bulletLengthIn, bulletDiameterIn: LOAD.bulletDiameterIn
+    };
+  }
+  // Reference line: the zero-day conditions with the same rifle inputs.
+  function referenceParams(p) {
+    var r = {}; for (var k in p) r[k] = p[k];
+    r.tempF = PRESETS.phx.temp; r.altitudeFt = PRESETS.phx.alt; r.humidityPct = PRESETS.phx.rh; r.pressureInHg = null; r.inclineDeg = 0;
+    return r;
+  }
+  function sameConditions(a, b) {
+    return a.tempF === b.tempF && a.altitudeFt === b.altitudeFt && a.humidityPct === b.humidityPct && a.pressureInHg == null && a.inclineDeg === 0;
+  }
+  function at(rows, yd) { for (var i = 0; i < rows.length; i++) if (Math.abs(rows[i].yd - yd) < 1e-6) return rows[i]; return null; }
+
+  function setPreset(key) {
+    var p = PRESETS[key];
+    if (p) { el.temp.value = p.temp; el.alt.value = p.alt; el.rh.value = p.rh; el.press.value = ''; }
+    chips.forEach(function (c) { c.setAttribute('aria-pressed', String(c.dataset.preset === key)); });
+  }
+  chips.forEach(function (c) { c.addEventListener('click', function () { setPreset(c.dataset.preset); render(); }); });
+
+  var timer = null;
+  function scheduleRender() { clearTimeout(timer); timer = setTimeout(render, 60); }
+  Object.keys(el).forEach(function (k) {
+    el[k].addEventListener('input', function () {
+      if (k === 'temp' || k === 'alt' || k === 'rh' || k === 'press') chips.forEach(function (c) { c.setAttribute('aria-pressed', 'false'); });
+      scheduleRender();
+    });
+  });
+
+  var state = { rows: [], ref: null, p: null };
+
+  function render() {
+    var p = params();
+    var out = window.Ballistics.solve(p);
+    var refP = referenceParams(p);
+    var ref = sameConditions(p, refP) ? null : window.Ballistics.solve(refP);
+    state = { rows: out.rows, ref: ref ? ref.rows : null, p: p, out: out };
+    renderAtmo(out, p);
+    renderHolds(out.rows);
+    renderStats(out);
+    renderChart();
+    renderReticle(out.rows);
+    renderTable(out.rows, p);
+  }
+
+  function renderAtmo(out, p) {
+    var a = out.atmo;
+    $('atmoline').textContent = 'Air: ' + fmt(a.pressureInHg, 2) + ' inHg station, ' + fmt(a.densityKgM3 * 0.062428, 4) + ' lb/ft³, density altitude ' +
+      fmt(Math.round(a.densityAltitudeFt / 10) * 10, 0) + ' ft. Stability factor Sg ' + fmt(out.sg, 2) + ' (1:' + p.twistIn + ' twist). Zero angle ' + fmt(out.zeroAngleMil, 2) + ' MIL above the line of sight.';
+  }
+
+  function renderHolds(rows) {
+    var host = $('holds'); host.textContent = '';
+    [200, 300, 400, 500, 600, 700].forEach(function (yd) {
+      var r = at(rows, yd); if (!r) return;
+      var d = document.createElement('div'); d.className = 'hold';
+      var a = document.createElement('div'); a.className = 'd'; a.textContent = yd + ' yd';
+      var v = document.createElement('div'); v.className = 'v'; v.textContent = mil1(r.dropMil);
+      var s = document.createElement('small'); s.textContent = 'MIL'; v.appendChild(s);
+      var sub = document.createElement('div'); sub.className = 's';
+      sub.textContent = fmt(Math.abs(r.dropIn), 1) + ' in · wind ' + mil1(r.windMil) + ' · ' + fmt(Math.round(r.velocityFps), 0) + ' fps';
+      d.appendChild(a); d.appendChild(v); d.appendChild(sub); host.appendChild(d);
+    });
+  }
+
+  function firstBelow(rows, pick) { for (var i = 0; i < rows.length; i++) if (pick(rows[i])) return rows[i].yd; return null; }
+  function renderStats(out) {
+    var rows = out.rows, host = $('stats'); host.textContent = '';
+    var pbr = firstBelow(rows, function (r) { return r.yd > 100 && r.dropIn < -3; });
+    var e1500 = firstBelow(rows, function (r) { return r.energyFtLb < 1500; });
+    var trans = firstBelow(rows, function (r) { return r.mach < 1.2; });
+    var sub = firstBelow(rows, function (r) { return r.mach < 1.0; });
+    var items = [
+      [pbr != null ? pbr - 5 : '1,000+', 'yd', 'Within 3 in of the line of sight with the 100 yd zero, so hold center'],
+      [e1500 != null ? e1500 - 5 : '1,000+', 'yd', 'Carries 1,500 ft·lb, a common elk minimum'],
+      [trans != null ? trans - 5 : '1,000+', 'yd', 'Stays above Mach 1.2, where drag modeling is most reliable'],
+      [sub != null ? sub - 5 : '1,000+', 'yd', 'Stays supersonic']
+    ];
+    items.forEach(function (it) {
+      var d = document.createElement('div'); d.className = 'stat';
+      var v = document.createElement('div'); v.className = 'v'; v.textContent = typeof it[0] === 'number' ? fmt(it[0], 0) : it[0];
+      var s = document.createElement('small'); s.textContent = ' ' + it[1]; v.appendChild(s);
+      var l = document.createElement('div'); l.className = 'l'; l.textContent = it[2];
+      d.appendChild(v); d.appendChild(l); host.appendChild(d);
+    });
+  }
+
+  // ---- Path chart ----
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  function mk(tag, attrs, parent) {
+    var n = document.createElementNS(SVG_NS, tag);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  }
+  function niceStep(range, target) {
+    var raw = range / target, mag = Math.pow(10, Math.floor(Math.log10(raw))), r = raw / mag;
+    return (r >= 5 ? 10 : r >= 2 ? 5 : r >= 1 ? 2 : 1) * mag;
+  }
+  var chartGeom = null;
+  function renderChart() {
+    var host = $('chart'), svg = host.querySelector('svg');
+    while (svg.childNodes.length > 1) svg.removeChild(svg.lastChild);
+    var W = Math.max(320, host.clientWidth || 640), H = Math.round(Math.min(380, Math.max(240, W * 0.5)));
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('width', W); svg.setAttribute('height', H);
+    var m = { t: 30, r: 64, b: 34, l: 48 }, iw = W - m.l - m.r, ih = H - m.t - m.b;
+    var rows = state.rows, ref = state.ref, maxYd = 1000;
+    var minY = Math.min.apply(null, rows.map(function (r) { return r.dropIn; }).concat(ref ? ref.map(function (r) { return r.dropIn; }) : []));
+    var maxY = Math.max(4, Math.max.apply(null, rows.map(function (r) { return r.dropIn; })));
+    var yStep = niceStep(maxY - minY, 6);
+    var y0 = Math.floor(minY / yStep) * yStep, y1 = Math.ceil(maxY / yStep) * yStep;
+    var x = function (yd) { return m.l + (yd / maxYd) * iw; }, y = function (v) { return m.t + ((y1 - v) / (y1 - y0)) * ih; };
+    var css = getComputedStyle(document.documentElement);
+    var ink = css.getPropertyValue('--ink-2').trim(), muted = css.getPropertyValue('--muted').trim(), line = css.getPropertyValue('--line').trim(), axis = css.getPropertyValue('--axis').trim();
+    var surface = css.getPropertyValue('--surface').trim(), accent = css.getPropertyValue('--accent').trim(), s2 = css.getPropertyValue('--series-2').trim();
+    // gridlines
+    for (var v = y0; v <= y1 + 1e-9; v += yStep) {
+      mk('line', { x1: m.l, x2: m.l + iw, y1: y(v), y2: y(v), stroke: v === 0 ? axis : line, 'stroke-width': 1 }, svg);
+      var t = mk('text', { x: m.l - 8, y: y(v) + 4, 'text-anchor': 'end', 'font-size': 11, 'font-family': 'IBM Plex Mono, monospace', fill: muted }, svg);
+      t.textContent = v === 0 ? '0' : fmt(v, 0);
+    }
+    for (var d = 0; d <= maxYd; d += 100) {
+      mk('line', { x1: x(d), x2: x(d), y1: m.t + ih, y2: m.t + ih + 4, stroke: axis }, svg);
+      var tx = mk('text', { x: x(d), y: m.t + ih + 18, 'text-anchor': 'middle', 'font-size': 11, 'font-family': 'IBM Plex Mono, monospace', fill: muted }, svg);
+      tx.textContent = d === 0 ? '0' : d === maxYd ? '1,000 yd' : String(d);
+    }
+    var yl = mk('text', { x: m.l - 8, y: 14, 'text-anchor': 'end', 'font-size': 11, 'font-family': 'IBM Plex Sans, sans-serif', fill: ink }, svg);
+    yl.textContent = 'inches';
+    var losLabel = mk('text', { x: m.l + 8, y: y(0) - 6, 'font-size': 11, 'font-family': 'IBM Plex Sans, sans-serif', fill: ink }, svg);
+    losLabel.textContent = 'line of sight';
+    var path = function (rs) { return rs.map(function (r, i) { return (i ? 'L' : 'M') + x(r.yd).toFixed(1) + ' ' + y(r.dropIn).toFixed(1); }).join(' '); };
+    // area wash under the active series, between path and LOS
+    var areaD = path(rows) + ' L' + x(rows[rows.length - 1].yd).toFixed(1) + ' ' + y(0).toFixed(1) + ' L' + x(rows[0].yd).toFixed(1) + ' ' + y(0).toFixed(1) + ' Z';
+    mk('path', { d: areaD, fill: accent, 'fill-opacity': 0.08, stroke: 'none' }, svg);
+    if (ref) mk('path', { d: path(ref), fill: 'none', stroke: s2, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+    mk('path', { d: path(rows), fill: 'none', stroke: accent, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, svg);
+    for (var k = 100; k <= maxYd; k += 100) {
+      var r = at(rows, k); if (!r) continue;
+      mk('circle', { cx: x(k), cy: y(r.dropIn), r: 6, fill: surface }, svg);
+      mk('circle', { cx: x(k), cy: y(r.dropIn), r: 4, fill: accent }, svg);
+    }
+    var last = rows[rows.length - 1];
+    var endLabel = mk('text', { x: x(last.yd) + 8, y: y(last.dropIn) + 4, 'font-size': 12, 'font-weight': 600, 'font-family': 'IBM Plex Mono, monospace', fill: ink }, svg);
+    endLabel.textContent = fmt(last.dropIn, 0) + ' in';
+    // crosshair layer
+    var cross = mk('line', { x1: 0, x2: 0, y1: m.t, y2: m.t + ih, stroke: axis, 'stroke-width': 1, visibility: 'hidden' }, svg);
+    var dot = mk('circle', { r: 5, fill: accent, stroke: surface, 'stroke-width': 2, visibility: 'hidden' }, svg);
+    var dot2 = mk('circle', { r: 5, fill: s2, stroke: surface, 'stroke-width': 2, visibility: 'hidden' }, svg);
+    mk('rect', { x: m.l, y: m.t, width: iw, height: ih, fill: 'transparent' }, svg);
+    chartGeom = { x: x, y: y, m: m, iw: iw, W: W, cross: cross, dot: dot, dot2: dot2 };
+    // legend
+    var lg = $('legend'); lg.textContent = '';
+    var a = document.createElement('span'); a.style.setProperty('--c', 'var(--accent)'); a.textContent = 'Current conditions'; lg.appendChild(a);
+    if (ref) { var b = document.createElement('span'); b.style.setProperty('--c', 'var(--series-2)'); b.textContent = 'Zero day (75°F, 1,100 ft)'; lg.appendChild(b); }
+  }
+  function hideTip() { var t = $('tip'); t.style.display = 'none'; if (chartGeom) { chartGeom.cross.setAttribute('visibility', 'hidden'); chartGeom.dot.setAttribute('visibility', 'hidden'); chartGeom.dot2.setAttribute('visibility', 'hidden'); } }
+  function showTip(clientX) {
+    if (!chartGeom || !state.rows.length) return;
+    var host = $('chart'), rect = host.getBoundingClientRect(), g = chartGeom;
+    var scale = rect.width / g.W, px = (clientX - rect.left) / scale;
+    var yd = Math.round(((px - g.m.l) / g.iw) * 1000 / 25) * 25;
+    yd = Math.max(25, Math.min(1000, yd));
+    var r = at(state.rows, yd); if (!r) return;
+    g.cross.setAttribute('x1', g.x(yd)); g.cross.setAttribute('x2', g.x(yd)); g.cross.setAttribute('visibility', 'visible');
+    g.dot.setAttribute('cx', g.x(yd)); g.dot.setAttribute('cy', g.y(r.dropIn)); g.dot.setAttribute('visibility', 'visible');
+    var tip = $('tip'); tip.textContent = '';
+    var t = document.createElement('div'); t.className = 't'; t.textContent = fmt(yd, 0) + ' yd'; tip.appendChild(t);
+    var row = function (color, text, strong) {
+      var d = document.createElement('div'); d.className = 'r'; var i = document.createElement('i'); i.style.setProperty('--c', color);
+      var s = document.createElement('span'); var b = document.createElement('b'); b.textContent = strong; s.appendChild(b); s.appendChild(document.createTextNode(' ' + text));
+      d.appendChild(i); d.appendChild(s); tip.appendChild(d);
+    };
+    row('var(--accent)', 'MIL · ' + fmt(r.dropIn, 1) + ' in · ' + fmt(Math.round(r.velocityFps), 0) + ' fps · ' + r.tofS.toFixed(2) + ' s', mil1(r.dropMil));
+    if (state.ref) {
+      var q = at(state.ref, yd);
+      if (q) { row('var(--series-2)', 'MIL · ' + fmt(q.dropIn, 1) + ' in (zero day)', mil1(q.dropMil)); g.dot2.setAttribute('cx', g.x(yd)); g.dot2.setAttribute('cy', g.y(q.dropIn)); g.dot2.setAttribute('visibility', 'visible'); }
+    }
+    tip.style.display = 'block';
+    var left = g.x(yd) * scale + 14, tw = tip.offsetWidth;
+    if (left + tw > rect.width - 4) left = g.x(yd) * scale - tw - 14;
+    tip.style.left = Math.max(4, left) + 'px'; tip.style.top = '10px';
+  }
+  (function () {
+    var host = $('chart');
+    host.addEventListener('pointermove', function (e) { showTip(e.clientX); });
+    host.addEventListener('pointerleave', hideTip);
+    host.setAttribute('tabindex', '0');
+    var focusYd = 500;
+    host.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowRight') focusYd = Math.min(1000, focusYd + 25); else if (e.key === 'ArrowLeft') focusYd = Math.max(25, focusYd - 25); else return;
+      e.preventDefault(); var rect = host.getBoundingClientRect(); var scale = rect.width / chartGeom.W; showTip(rect.left + chartGeom.x(focusYd) * scale);
+    });
+    host.addEventListener('blur', hideTip);
+  })();
+
+  // ---- Mil scale ----
+  function renderReticle(rows) {
+    var svg = $('reticle'); svg.textContent = '';
+    var W = 220, H = 440, top = 24, bottom = 20, cx = 70;
+    var last = at(rows, 1000), maxMil = Math.max(8, Math.ceil((last ? last.dropMil : 8) + 0.5));
+    var ih = H - top - bottom, y = function (mil) { return top + (mil / maxMil) * ih; };
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    var css = getComputedStyle(document.documentElement);
+    var ink = css.getPropertyValue('--ink').trim(), ink2 = css.getPropertyValue('--ink-2').trim(), muted = css.getPropertyValue('--muted').trim(), accent = css.getPropertyValue('--accent').trim(), surface = css.getPropertyValue('--surface').trim();
+    mk('line', { x1: cx, x2: cx, y1: top - 10, y2: top + ih + 6, stroke: ink2, 'stroke-width': 1.5 }, svg);
+    mk('line', { x1: cx - 28, x2: cx + 28, y1: y(0), y2: y(0), stroke: ink2, 'stroke-width': 1.5 }, svg);
+    mk('circle', { cx: cx, cy: y(0), r: 2.2, fill: ink2 }, svg);
+    for (var m = 0.2; m <= maxMil + 1e-9; m = Math.round((m + 0.2) * 10) / 10) {
+      var whole = Math.abs(m - Math.round(m)) < 1e-6, half = Math.abs(m * 2 - Math.round(m * 2)) < 1e-6;
+      var half_w = whole ? 12 : half ? 7 : 3.5;
+      mk('line', { x1: cx - half_w, x2: cx + half_w, y1: y(m), y2: y(m), stroke: ink2, 'stroke-width': whole ? 1.5 : 1 }, svg);
+      if (whole) { var t = mk('text', { x: cx - 18, y: y(m) + 4, 'text-anchor': 'end', 'font-size': 11, 'font-family': 'IBM Plex Mono, monospace', fill: muted }, svg); t.textContent = String(Math.round(m)); }
+    }
+    var lastY = -Infinity;
+    for (var d = 200; d <= 1000; d += 100) {
+      var r = at(rows, d); if (!r || r.dropMil > maxMil || r.dropMil < 0) continue;
+      var yy = y(r.dropMil), ly = Math.max(yy, lastY + 13);
+      mk('circle', { cx: cx, cy: yy, r: 5.5, fill: surface }, svg);
+      mk('circle', { cx: cx, cy: yy, r: 3.5, fill: accent }, svg);
+      mk('line', { x1: cx + 10, x2: cx + 34, y1: yy, y2: ly, stroke: accent, 'stroke-width': 1 }, svg);
+      var lab = mk('text', { x: cx + 40, y: ly + 4, 'font-size': 12, 'font-family': 'IBM Plex Mono, monospace', 'font-weight': 600, fill: ink }, svg);
+      lab.textContent = d + ' yd';
+      var lab2 = mk('text', { x: cx + 100, y: ly + 4, 'font-size': 12, 'font-family': 'IBM Plex Mono, monospace', fill: ink2 }, svg);
+      lab2.textContent = mil1(r.dropMil);
+      lastY = ly;
+    }
+    var cap = mk('text', { x: cx - 18, y: y(0) + 4, 'text-anchor': 'end', 'font-size': 11, 'font-family': 'IBM Plex Mono, monospace', fill: muted }, svg);
+    cap.textContent = '0';
+  }
+
+  // ---- Table ----
+  function renderTable(rows, p) {
+    var tb = document.querySelector('#dope tbody'); tb.textContent = '';
+    var step = parseInt(el.step.value, 10) || 50;
+    $('windhead').textContent = 'Wind ' + fmt(p.windMph, 0) + ' mph MIL';
+    var cell = function (tr, text, cls) { var td = document.createElement('td'); td.textContent = text; if (cls) td.className = cls; tr.appendChild(td); return td; };
+    for (var d = step; d <= 1000; d += step) {
+      var r = at(rows, d); if (!r) continue;
+      var tr = document.createElement('tr'); if (d % 100 === 0) tr.className = 'h';
+      cell(tr, fmt(d, 0));
+      cell(tr, (r.dropIn > 0 ? '+' : '') + fmt(r.dropIn, 1));
+      cell(tr, mil1(r.dropMil), 'mil');
+      cell(tr, fmt(r.dropMoa, 2));
+      cell(tr, mil1(r.windMil));
+      cell(tr, r.driftMil < 0.05 ? '—' : mil1(r.driftMil) + ' L');
+      cell(tr, fmt(Math.round(r.velocityFps), 0));
+      cell(tr, fmt(Math.round(r.energyFtLb), 0));
+      cell(tr, r.tofS.toFixed(3));
+      cell(tr, r.mach.toFixed(2));
+      tb.appendChild(tr);
+    }
+  }
+
+  var ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(function () { if (state.rows.length) renderChart(); }) : null;
+  if (ro) ro.observe($('chart'));
+  if (window.matchMedia) { var mq = window.matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', function () { if (state.rows.length) { renderChart(); renderReticle(state.rows); } }); }
+  new MutationObserver(function () { if (state.rows.length) { renderChart(); renderReticle(state.rows); } }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { if (state.rows.length) renderChart(); });
+  render();
+})();
+</script>
+</body>
+</html>
