@@ -176,10 +176,10 @@ a { color: var(--accent); }
   </div>
   <div class="chips" role="group" aria-label="Montana condition presets">
     <span class="grp">Miller Mountain · Lolo NF, MT</span>
-    <button class="chip" type="button" data-preset="mt-dawn" aria-pressed="false">Late-Oct dawn · 5,500 ft · 22°F</button>
-    <button class="chip" type="button" data-preset="mt-mid" aria-pressed="false">Nov midday · 5,500 ft · 35°F</button>
-    <button class="chip" type="button" data-preset="mt-cold" aria-pressed="false">Cold snap · 6,500 ft · 5°F</button>
-    <button class="chip" type="button" data-preset="mt-top" aria-pressed="false">Ridge top · 7,000 ft · 15°F</button>
+    <button class="chip" type="button" data-preset="mt-dawn" aria-pressed="false">Late-Oct dawn · 4,650 ft · 25°F</button>
+    <button class="chip" type="button" data-preset="mt-mid" aria-pressed="false">Nov midday · 4,650 ft · 38°F</button>
+    <button class="chip" type="button" data-preset="mt-cold" aria-pressed="false">Cold snap · 4,650 ft · 0°F</button>
+    <button class="chip" type="button" data-preset="mt-valley" aria-pressed="false">Clark Fork valley · 3,050 ft · 30°F</button>
   </div>
   <div class="fields">
     <div class="field"><label for="temp">Temperature</label><input id="temp" type="number" step="1" value="85"><span class="unit">°F</span></div>
@@ -205,7 +205,7 @@ a { color: var(--accent); }
 <section aria-label="Montana scenarios">
   <div class="card-head"><h2>Miller Mountain vs the Phoenix zero</h2><span class="note" id="scen-note"></span></div>
   <div class="tablewrap"><table id="scen"><thead></thead><tbody></tbody></table></div>
-  <div class="tfoot"><span>Elevation hold per scenario, same rifle inputs, no wind. Miller Peak tops out at 7,030 ft; the Miller Creek drainage starts near 3,800 ft, so set Elevation to where you are glassing from.</span><span>Montana temperatures are late-season projections (Missoula valley Nov. averages 41 / 24 °F, minus about 3.5 °F per 1,000 ft), not forecasts.</span></div>
+  <div class="tfoot"><span>Elevation hold per scenario, same rifle inputs, no wind. Miller Mountain (47.0377, −114.7014) stands at 4,650 ft, the ridge beside it reaches 4,900 ft, and the Clark Fork at Tarkio is near 3,050 ft, so set Elevation to where you are shooting from.</span><span>Montana temperatures are late-season projections (Missoula valley Oct. 57 / 31 °F, Nov. 41 / 24 °F, minus about 3.5 °F per 1,000 ft), not forecasts.</span></div>
 </section>
 
 <section class="row2" aria-label="Charts">
@@ -251,7 +251,7 @@ a { color: var(--accent); }
       <li>Spin drift uses the Miller stability factor and Litz's approximation for the bullet length, weight and twist listed above. Coriolis and aerodynamic jump are not included; both are under 0.1 MIL inside 800 yd for these loads.</li>
       <li id="note-round"></li>
       <li id="note-published"></li>
-      <li>Miller Mountain presets use Miller Peak (7,030 ft, Lolo National Forest, 7 mi south of Missoula) and its Miller Creek approach. Set Elevation and Temperature to the day's values for any other spot in the forest.</li>
+      <li>Miller Mountain presets use the summit at 47.0377, −114.7014 in the Lolo National Forest just north of Tarkio, MT: 4,650 ft from the USGS-derived terrain tiles, with the adjoining ridge at 4,900 ft and the valley floor near 3,050 ft. Set Elevation and Temperature to the day's values for any other spot.</li>
     </ul>
     <p class="callout">This is a prediction, not a confirmation. Mark confirmed holds on the printed card and let them override the table.</p>
   </div>
@@ -413,19 +413,19 @@ a { color: var(--accent); }
     'phx-hot': { label: 'Phoenix, summer afternoon', temp: 105, alt: 1100, rh: 10 },
     winter: { label: 'Phoenix, winter dawn', temp: 40, alt: 1100, rh: 40 },
     rim: { label: 'Mogollon Rim hunt', temp: 45, alt: 6500, rh: 30 },
-    'mt-dawn': { label: 'Miller Mtn, late-Oct dawn', temp: 22, alt: 5500, rh: 65 },
-    'mt-mid': { label: 'Miller Mtn, Nov midday', temp: 35, alt: 5500, rh: 50 },
-    'mt-cold': { label: 'Miller Mtn, cold snap', temp: 5, alt: 6500, rh: 65 },
-    'mt-top': { label: 'Miller Mtn, ridge top', temp: 15, alt: 7000, rh: 60 }
+    'mt-dawn': { label: 'Miller Mtn, late-Oct dawn', temp: 25, alt: 4650, rh: 65 },
+    'mt-mid': { label: 'Miller Mtn, Nov midday', temp: 38, alt: 4650, rh: 50 },
+    'mt-cold': { label: 'Miller Mtn, cold snap', temp: 0, alt: 4650, rh: 65 },
+    'mt-valley': { label: 'Clark Fork valley at Tarkio', temp: 30, alt: 3050, rh: 60 }
   };
   // Side-by-side scenarios for the comparison table: the Phoenix zero day
   // against the Montana hunt, so the shift in holds is visible at a glance.
   var SCENARIOS = [
     { key: 'zero', short: 'Phoenix zero day', sub: '85°F · 1,100 ft' },
-    { key: 'mt-mid', short: 'Miller Mtn midday', sub: '35°F · 5,500 ft' },
-    { key: 'mt-dawn', short: 'Miller Mtn dawn', sub: '22°F · 5,500 ft' },
-    { key: 'mt-cold', short: 'Cold snap', sub: '5°F · 6,500 ft' },
-    { key: 'mt-top', short: 'Ridge top', sub: '15°F · 7,000 ft' }
+    { key: 'mt-mid', short: 'Miller Mtn midday', sub: '38°F · 4,650 ft' },
+    { key: 'mt-dawn', short: 'Miller Mtn dawn', sub: '25°F · 4,650 ft' },
+    { key: 'mt-cold', short: 'Cold snap', sub: '0°F · 4,650 ft' },
+    { key: 'mt-valley', short: 'Clark Fork valley', sub: '30°F · 3,050 ft' }
   ];
   var $ = function (id) { return document.getElementById(id); };
   var el = { temp: $('temp'), alt: $('alt'), press: $('press'), rh: $('rh'), mv: $('mv'), bc: $('bc'), sh: $('sh'), zero: $('zero'), wind: $('wind'), incl: $('incl'), step: $('step') };
