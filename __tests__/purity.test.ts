@@ -37,6 +37,7 @@ const PURE_FILES = [
   'src/lib/tokens.ts',
   'src/lib/pickerOption.ts',
   'src/lib/tables.ts',
+  'src/lib/share.ts',
   'src/db/ids.ts',
   'src/db/schema.ts',
   'src/features/loads/recipe.ts',

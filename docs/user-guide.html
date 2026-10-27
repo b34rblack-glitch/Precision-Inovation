@@ -703,6 +703,8 @@ mark { background: var(--sel); color: var(--text); border-radius: 2px; padding: 
 <p>Your notes, if any, print as grey text under the spec rows.</p>
 <h3 id="rifles-rifle-detail-buttons-and-sections-in-order">Buttons and sections, in order</h3>
 <p><strong>Range Card</strong> (amber, full width) — opens the range card for this rifle. If the rifle has no load assigned yet, the range card screen tells you so and offers to create one.</p>
+<p><strong>Share Rifle</strong> (grey outline button) — writes a file named <code>precision-rifle-&lt;name&gt;-YYYY-MM-DD.json</code> holding <em>only this rifle</em>: its profile, every load assigned to it with all versions, its workups and chronograph strings, its range sessions with their DOPE entries, and its range cards. The file goes to the system share sheet, so you can AirDrop, message or email it to a friend. The photo stays on your phone. The button shows a spinner while the file is written; a failure shows an alert titled <strong>Share failed</strong>.</p>
+<p>The person receiving it adds it with <strong>Settings → Add from Backup</strong> (see <a href="#rifles-settings-add-from-backup">Add from Backup</a>), which keeps everything they already have. A workup on this rifle that used a load assigned to a <em>different</em> rifle is left out of the file, since the load it needs is not in it; a session shot with such a load is included with its load reference cleared.</p>
 <p><strong>Loads for this rifle</strong> — every non-archived load whose rifle is set to this one, newest-edited first. Tap a load to open it. With none assigned you see:</p>
 <blockquote><p>No loads assigned to this rifle yet.</p></blockquote>
 <p><strong>New Load for this Rifle</strong> (grey outline button) — opens the new-load form with this rifle pre-selected, so you do not have to pick it from a list.</p>
@@ -819,22 +821,36 @@ mark { background: var(--sel); color: var(--text); border-radius: 2px; padding: 
 <h2 id="rifles-settings">Settings</h2>
 <p><strong>How to get there:</strong> Rifles tab → <strong>gear icon</strong> in the top-right of the header. The screen header reads <strong>Settings</strong>.</p>
 <h3 id="rifles-settings-what-the-screen-is-for">What the screen is for</h3>
-<p>Backups, and a short disclaimer. There are no preferences here — no theme, no units, no account. Units live on each rifle.</p>
+<p>Backups, adding rifles from a backup or a friend's shared file, and a short disclaimer. There are no preferences here — no theme, no units, no account. Units live on each rifle.</p>
 <h3 id="rifles-settings-your-data">Your data</h3>
 <p>The first card explains the situation:</p>
 <blockquote><p>Everything lives on this device — nothing is uploaded anywhere. Export a backup before switching phones, and back up regularly.</p></blockquote>
 <p>Take this literally. There is no cloud copy. If the phone is lost, wiped, or the app is uninstalled, an exported backup file is the only way your data survives.</p>
 <h4 id="rifles-settings-export-backup">Export Backup</h4>
-<p>Tapping <strong>Export Backup</strong> dumps the <strong>entire database</strong> to a JSON file named <code>precision-backup-YYYY-MM-DD.json</code> and hands it to your system share sheet (titled <em>Export backup</em>), from where you can save it to files, cloud storage, email, or wherever you like. The button shows a spinner while it works, and <strong>Import Backup</strong> is disabled during the export.</p>
+<p>Tapping <strong>Export Backup</strong> dumps the <strong>entire database</strong> to a JSON file named <code>precision-backup-YYYY-MM-DD.json</code> and hands it to your system share sheet (titled <em>Export backup</em>), from where you can save it to files, cloud storage, email, or wherever you like. The button shows a spinner while it works, and the other two buttons are disabled during the export.</p>
 <p>The export includes every table in the app: rifles (<strong>including archived ones</strong>), loads, load versions, workups, workup steps, range sessions, chronograph strings, individual shots, DOPE entries, and range card configurations. Photos are <strong>not</strong> embedded — the file stores the reference to the photo on the device, so photos do not travel with the backup to a new phone.</p>
 <p>If anything goes wrong you get an alert titled <strong>Export failed</strong> with the reason.</p>
-<h4 id="rifles-settings-import-backup-destructive">Import Backup (destructive)</h4>
-<p>Tapping <strong>Import Backup</strong> opens your device file picker, filtered to JSON files. Backing out of the picker cancels quietly with no further prompt.</p>
+<h4 id="rifles-settings-add-from-backup">Add from Backup (merge)</h4>
+<p>Tapping <strong>Add from Backup</strong> opens your device file picker, filtered to JSON files. It accepts a full backup or a file made with <strong>Share Rifle</strong>. Backing out of the picker cancels quietly.</p>
+<p>Once you pick a file, a sheet lists what is in it — one row per rifle, showing how many loads and sessions it carries (and <em>archived</em> if it was archived on the sending phone) — plus a row for <strong>Loads not assigned to a rifle</strong> when the file has any. Every rifle starts ticked; the unassigned loads start unticked. Tap rows to change the selection and then tap <strong>Add N items</strong>. The sheet is titled <strong>Add shared rifle</strong> when the file came from Share Rifle and <strong>Add from backup</strong> otherwise.</p>
+<p>What happens when you confirm:</p>
+<ol>
+<li>Nothing already in the app is changed. This is a <em>merge</em>: the ticked rifles are added next to your own, with their loads, load versions, workups, range sessions, chronograph strings, DOPE entries and range cards.</li>
+<li>Every imported row gets a <strong>new id</strong>. That is what lets a friend's rifle sit beside yours without a collision, and it also means adding the same file twice gives you two copies — archive the one you do not want.</li>
+<li>Photo references are dropped, because the photo bytes are not in the file.</li>
+<li>The rows are written in one transaction and stamped like rows you created yourself, so they sync to your other devices if cloud sync is on.</li>
+</ol>
+<p>On success you get:</p>
+<blockquote><p><strong>Added to your data</strong></p>
+<p>Added <em>N</em> rifles, <em>N</em> loads, <em>N</em> sessions.</p></blockquote>
+<p>A file with no rifles and no unassigned loads shows <strong>Nothing to add</strong>. Validation failures show the same <strong>Import failed</strong> messages listed under Restore below, and they run before anything is written.</p>
+<h4 id="rifles-settings-import-backup-destructive">Restore Backup (replace all, destructive)</h4>
+<p>Tapping <strong>Restore Backup (replace all)</strong> opens your device file picker, filtered to JSON files. Backing out of the picker cancels quietly with no further prompt.</p>
 <p>Once you pick a file, you must confirm:</p>
 <blockquote><p><strong>Replace all data?</strong></p>
 <p>Importing a backup replaces everything currently in the app. A safety copy of current data is saved first.</p>
 <p>[ Cancel ] [ Replace ]</p></blockquote>
-<p><strong>Replace</strong> is a destructive action and it means what it says: this is a <em>replace</em>, not a <em>merge</em>. Everything currently in the app is deleted and the file's contents are loaded in its place. There is no way to combine two backups.</p>
+<p><strong>Replace</strong> is a destructive action and it means what it says: this is a <em>replace</em>, not a <em>merge</em>. Everything currently in the app is deleted and the file's contents are loaded in its place. To combine data from two phones, use <strong>Add from Backup</strong> instead.</p>
 <p>What happens when you tap <strong>Replace</strong>:</p>
 <ol>
 <li>The app writes a safety copy of your current data to <code>precision-pre-restore-backup.json</code> in the app's cache directory, <strong>before</strong> touching anything.</li>
@@ -844,7 +860,7 @@ mark { background: var(--sel); color: var(--text); border-radius: 2px; padding: 
 <blockquote><p><strong>Backup restored</strong></p>
 <p>Imported <em>N</em> rifles, <em>N</em> loads, <em>N</em> sessions.</p></blockquote>
 <p>A caution about that safety copy: it is written to the app's <strong>cache</strong> directory, which the operating system may clear at any time, and it is never handed to the share sheet — you cannot see or open it from Settings. It protects you against a bad import file in the moment; it is not a substitute for exporting a real backup first.</p>
-<p>Import failures show an alert titled <strong>Import failed</strong>. Two of the messages come from the app's own validation:</p>
+<p>Restore and Add failures show an alert titled <strong>Import failed</strong>. Two of the messages come from the app's own validation:</p>
 <div class="tw"><table><thead><tr><th style="text-align:left">Cause</th><th style="text-align:left">Exact message</th></tr></thead><tbody><tr><td style="text-align:left">The file is not a Precision Innovation export</td><td style="text-align:left"><code>Not a Precision Innovation backup file.</code></td></tr><tr><td style="text-align:left">The file came from a newer version of the app</td><td style="text-align:left"><code>Backup was made by a newer app version — update the app first.</code></td></tr></tbody></table></div>
 <p>Both checks run <strong>before</strong> any data is touched, so a wrong file cannot damage what you already have.</p>
 <h3 id="rifles-settings-about">About</h3>

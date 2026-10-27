@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useState } from 'react';
 import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Card } from '@/components/Card';
@@ -9,6 +10,7 @@ import { Screen } from '@/components/Screen';
 import { archiveRifle, rifleByIdQuery } from '@/db/repositories/rifles';
 import { loadsForRifleQuery } from '@/db/repositories/loads';
 import { recentSessionsForRifleQuery } from '@/db/repositories/sessions';
+import { shareRifle } from '@/lib/backup';
 import { colors, radii, spacing, type } from '@/theme';
 
 function SpecRow({ label, value }: { label: string; value: string | null }) {
@@ -27,6 +29,7 @@ export default function RifleDetailScreen() {
   const { data, updatedAt } = useLiveQuery(rifleByIdQuery(id), [id]);
   const { data: rifleLoads } = useLiveQuery(loadsForRifleQuery(id), [id]);
   const { data: sessions } = useLiveQuery(recentSessionsForRifleQuery(id, 5), [id]);
+  const [sharing, setSharing] = useState(false);
   const rifle = data[0];
   if (!rifle) {
     // updatedAt is undefined until the live query's first emission — stay blank
@@ -60,6 +63,19 @@ export default function RifleDetailScreen() {
         },
       },
     ]);
+  };
+
+  // One file with this rifle, its loads, sessions, DOPE and range cards, for
+  // a friend to add to their own app (Settings → Add from Backup).
+  const doShare = async () => {
+    setSharing(true);
+    try {
+      await shareRifle(rifle);
+    } catch (e) {
+      Alert.alert('Share failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setSharing(false);
+    }
   };
 
   return (
@@ -110,6 +126,13 @@ export default function RifleDetailScreen() {
       <Button
         label="Range Card"
         onPress={() => router.push(`/range/cards/${rifle.id}`)}
+        style={{ marginBottom: spacing.md }}
+      />
+      <Button
+        label="Share Rifle"
+        variant="secondary"
+        onPress={doShare}
+        loading={sharing}
         style={{ marginBottom: spacing.lg }}
       />
 

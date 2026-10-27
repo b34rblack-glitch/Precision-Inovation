@@ -5,13 +5,30 @@ import { Alert, Text } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
+import { AddFromBackupModal } from '@/features/backup/AddFromBackupModal';
 import { SyncCard } from '@/features/sync/SyncCard';
+import { addFromBackup } from '@/db/repositories/importBackup';
 import { buildBackup, exportBackup, restoreBackup } from '@/lib/backup';
+import { describeBackup, parseBackup, type BackupSummary, type ImportSelection } from '@/lib/share';
 import { spacing, type } from '@/theme';
+
+/** Open a JSON file from the device and return its text, or null if cancelled. */
+async function pickJsonFile(): Promise<string | null> {
+  const result = await DocumentPicker.getDocumentAsync({
+    type: 'application/json',
+    copyToCacheDirectory: true,
+  });
+  if (result.canceled || !result.assets[0]) return null;
+  return new File(result.assets[0].uri).text();
+}
 
 export default function SettingsScreen() {
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  // "Add from backup": the parsed file waits here while the picker is open.
+  const [pending, setPending] = useState<{ json: string; summary: BackupSummary } | null>(null);
+  const [adding, setAdding] = useState(false);
+  const busy = exporting || importing || adding;
 
   const doExport = async () => {
     setExporting(true);
@@ -34,14 +51,47 @@ export default function SettingsScreen() {
     file.write(JSON.stringify(backup));
   };
 
+  // Merge: add selected rifles from a backup or a friend's shared rifle file
+  // next to the data already here. Nothing existing is touched.
+  const doAdd = async () => {
+    try {
+      const json = await pickJsonFile();
+      if (json == null) return;
+      const parsed = parseBackup(json);
+      const summary = describeBackup(parsed.tables, parsed.share);
+      if (summary.rifles.length === 0 && summary.unattachedLoads === 0) {
+        Alert.alert('Nothing to add', 'This file has no rifles or loads in it.');
+        return;
+      }
+      setPending({ json, summary });
+    } catch (e) {
+      Alert.alert('Import failed', e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const confirmAdd = async (selection: ImportSelection) => {
+    if (!pending) return;
+    setAdding(true);
+    try {
+      const { counts } = await addFromBackup(pending.json, selection);
+      setPending(null);
+      Alert.alert(
+        'Added to your data',
+        `Added ${counts.rifles} ${counts.rifles === 1 ? 'rifle' : 'rifles'}, ${counts.loads} ${
+          counts.loads === 1 ? 'load' : 'loads'
+        }, ${counts.rangeSessions} ${counts.rangeSessions === 1 ? 'session' : 'sessions'}.`,
+      );
+    } catch (e) {
+      Alert.alert('Import failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setAdding(false);
+    }
+  };
+
   const doImport = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: 'application/json',
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled || !result.assets[0]) return;
-      const uri = result.assets[0].uri;
+      const json = await pickJsonFile();
+      if (json == null) return;
       Alert.alert(
         'Replace all data?',
         'Importing a backup replaces everything currently in the app. A safety copy of current data is saved first.',
@@ -54,7 +104,6 @@ export default function SettingsScreen() {
               setImporting(true);
               try {
                 await writeSafetyBackup();
-                const json = await new File(uri).text();
                 const { counts } = await restoreBackup(json);
                 Alert.alert(
                   'Backup restored',
@@ -87,16 +136,35 @@ export default function SettingsScreen() {
           and even then it goes only to a folder in your own Google Drive. Export a backup before
           switching phones, and back up regularly.
         </Text>
-        <Button label="Export Backup" onPress={doExport} loading={exporting} disabled={importing} />
+        <Button label="Export Backup" onPress={doExport} loading={exporting} disabled={busy && !exporting} />
+        <Text style={[type.secondary, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>
+          Add from Backup keeps everything you have and adds the rifles you pick from a backup or a
+          rifle a friend shared with you. Restore Backup replaces everything.
+        </Text>
         <Button
-          label="Import Backup"
+          label="Add from Backup"
+          variant="secondary"
+          onPress={doAdd}
+          loading={adding}
+          disabled={busy && !adding}
+        />
+        <Button
+          label="Restore Backup (replace all)"
           variant="secondary"
           onPress={doImport}
           loading={importing}
-          disabled={exporting}
+          disabled={busy && !importing}
           style={{ marginTop: spacing.md }}
         />
       </Card>
+
+      <AddFromBackupModal
+        visible={pending !== null}
+        summary={pending?.summary ?? null}
+        busy={adding}
+        onClose={() => setPending(null)}
+        onConfirm={confirmAdd}
+      />
 
       <Card>
         <Text style={type.heading}>About</Text>
