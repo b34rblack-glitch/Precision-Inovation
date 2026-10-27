@@ -15,6 +15,7 @@ vi.mock('expo-sharing', () => ({
 }));
 
 import { BACKUP_SCHEMA_VERSION } from '@/lib/backup';
+import { remapIds, selectSubset } from '@/lib/share';
 import { solveTrajectory } from '@/lib/ballistics/solver';
 import { COLUMNS, DATE_KEYS, TABLE_ORDER, TABLES } from '@/lib/tables';
 import { parseTwistRate } from '@/lib/units';
@@ -148,6 +149,33 @@ describe('Phoenix workspace import file', () => {
       expect(dope).toEqual({ d: 100, e: 0, u: unit, c: 1 });
     }
     expect(IDS.cross.rifle).not.toBe(IDS.mpr.rifle);
+  });
+
+  it('shares one rifle as a subset that restores on its own, and adds next to the full set', () => {
+    // Share: just the CROSS, with its load, zero session, DOPE and card.
+    const shared = selectSubset(workspace.tables, { rifleIds: [IDS.cross.rifle], includeUnattachedLoads: false });
+    const db = freshDatabase();
+    const counts = restore(db, JSON.stringify({ ...workspace, tables: shared }));
+    expect(counts).toMatchObject({ rifles: 1, loads: 1, loadVersions: 1, rangeSessions: 1, dopeEntries: 1, rangeCards: 1 });
+    expect(db.prepare('SELECT name FROM rifles').get()).toEqual({ name: CROSS.rifle.name });
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+
+    // Add: the friend already has both rifles; the shared one lands as a copy
+    // with fresh ids, and the unique (rifle, load version) card index holds.
+    const full = freshDatabase();
+    restore(full, JSON.stringify(workspace));
+    let n = 0;
+    const added = remapIds(shared, () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`, new Date());
+    restore(full, JSON.stringify({ ...workspace, tables: added }));
+    expect(full.prepare('SELECT count(*) AS c FROM rifles').get()).toEqual({ c: 3 });
+    expect(full.prepare('SELECT count(*) AS c FROM range_cards').get()).toEqual({ c: 3 });
+    expect(full.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    const copy = full
+      .prepare('SELECT current_version_id AS v FROM loads WHERE rifle_id = ?')
+      .get('00000000-0000-4000-8000-000000000001') as { v: string };
+    expect(full.prepare('SELECT load_id AS l FROM load_versions WHERE id = ?').get(copy.v)).toEqual({
+      l: '00000000-0000-4000-8000-000000000002',
+    });
   });
 
   it('solves to the holds on the published range cards', () => {

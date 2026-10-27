@@ -25,6 +25,11 @@ to real range results. This app is built around exactly that missing loop:
    **field mode** (amber on black, huge digits, screen stays awake), and **PDF export**
    sized for a stock pack.
 
+**Share a rifle.** Any rifle can be exported on its own, with its loads, sessions, DOPE and
+range cards, as a file a friend adds to their app from Settings → Add from Backup. Adding
+keeps everything they already have: imported rows get fresh ids and go through the same
+write funnel as rows created on the device, so they sync like anything else.
+
 ## Tech
 
 - **Expo SDK 57** + **expo-router** + TypeScript strict. Runs in Expo Go, except
