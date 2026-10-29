@@ -13,7 +13,7 @@ export default function NewLoadScreen() {
       onSubmit={async ({ meta, components }) => {
         // A thrown error is shown by the form as "Save failed".
         const load = await createLoad(meta, components);
-        router.replace(`/loads/${load.id}`);
+        return () => router.replace(`/loads/${load.id}`);
       }}
     />
   );

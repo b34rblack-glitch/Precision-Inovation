@@ -1,13 +1,69 @@
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
-import { Stack } from 'expo-router';
+import { Stack, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Alert, ScrollView, Share, Text, View } from 'react-native';
 import migrations from '../drizzle/migrations';
+import { Button } from '@/components/Buttons';
 import { db, sqlite, tryInitDb } from '@/db/client';
 import { ensureSyncBootstrap } from '@/db/syncBootstrap';
+import {
+  formatCrashReport,
+  installCrashCapture,
+  readCrashReport,
+  reportFor,
+  writeCrashReport,
+} from '@/lib/crashLog';
 import { defaultDeviceName, platformTag } from '@/sync/platform/deviceLabel';
-import { colors, spacing } from '@/theme';
+import { colors, spacing, type } from '@/theme';
+
+// Before anything renders: an uncaught error now leaves a report behind
+// (Settings → Last crash) instead of only closing the app.
+installCrashCapture();
+
+/**
+ * Render errors anywhere in the tree land here instead of taking the process
+ * down. The report is written to the same file the global handler uses, so
+ * the message survives a restart either way.
+ */
+export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
+  const report = reportFor(error, 'error-boundary', { fatal: false });
+  useEffect(() => writeCrashReport(report), [error]); // eslint-disable-line react-hooks/exhaustive-deps
+  const text = formatCrashReport(report);
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.bg, padding: spacing.xl, paddingTop: 64 }}>
+      <Text style={type.heading}>Something went wrong</Text>
+      <Text style={[type.secondary, { marginTop: spacing.sm }]}>
+        The screen hit an error. Share this report so it can be fixed, then try again.
+      </Text>
+      <ScrollView style={{ flex: 1, marginVertical: spacing.lg }}>
+        <Text style={[type.caption, { fontFamily: 'monospace', color: colors.text }]} selectable>
+          {text}
+        </Text>
+      </ScrollView>
+      <Button label="Share Report" variant="secondary" onPress={() => void Share.share({ message: text })} />
+      <Button label="Try Again" onPress={retry} style={{ marginTop: spacing.md }} />
+    </View>
+  );
+}
+
+/** Once per launch: if the last run ended in a crash, say so and offer the report. */
+function CrashNotice() {
+  const router = useRouter();
+  useEffect(() => {
+    const report = readCrashReport();
+    if (!report) return;
+    Alert.alert(
+      'The app closed unexpectedly',
+      `Last time it hit: ${report.message}\n\nThe full report is under Settings → Last crash.`,
+      [
+        { text: 'Later', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => router.push('/settings') },
+      ],
+    );
+  }, [router]);
+  return null;
+}
 
 export default function RootLayout() {
   // Init the db here (lazily, once) so an open failure surfaces as UI instead
@@ -67,6 +123,7 @@ export default function RootLayout() {
 
   return (
     <>
+      <CrashNotice />
       <StatusBar style="light" />
       <Stack
         screenOptions={{

@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
 import { loadByIdQuery, updateLoad, versionsForLoadQuery } from '@/db/repositories/loads';
+import { crumb } from '@/lib/crashLog';
 import { LoadForm } from '@/features/loads/LoadForm';
 
 export default function EditLoadScreen() {
@@ -35,27 +36,27 @@ export default function EditLoadScreen() {
       onSubmit={async ({ meta, components }) => {
         // A thrown error is shown by the form as "Save failed".
         const { createdNewVersion } = await updateLoad(load.id, meta, components);
-        if (!createdNewVersion) {
-          router.back();
-          return;
-        }
-        // Leave only once the alert is gone. This screen used to raise the
-        // dialog and pop itself in the same tick; a native dialog and a
-        // native-stack pop are both fragment transactions on the one Android
-        // activity, and that overlap is the likeliest cause of the app closing
-        // on save. Sequencing them also reads better: acknowledge, then leave.
-        let left = false;
-        const leave = () => {
-          if (left) return;
-          left = true;
-          router.back();
+        crumb(`edit load: updateLoad done, newVersion=${createdNewVersion}`);
+        if (!createdNewVersion) return () => router.back();
+        // Leave only once the alert is gone. Raising a native dialog in the
+        // same tick as a native-stack pop overlaps two fragment transactions
+        // on the one Android activity; sequencing them also reads better.
+        return () => {
+          let left = false;
+          const leave = () => {
+            if (left) return;
+            left = true;
+            crumb('edit load: alert dismissed, going back');
+            router.back();
+          };
+          crumb('edit load: showing new-version alert');
+          Alert.alert(
+            'New version created',
+            'This load had range history, so your changes were saved as a new version. Past results stay tied to the recipe that produced them.',
+            [{ text: 'OK', onPress: leave }],
+            { cancelable: true, onDismiss: leave },
+          );
         };
-        Alert.alert(
-          'New version created',
-          'This load had range history, so your changes were saved as a new version. Past results stay tied to the recipe that produced them.',
-          [{ text: 'OK', onPress: leave }],
-          { cancelable: true, onDismiss: leave },
-        );
       }}
     />
   );

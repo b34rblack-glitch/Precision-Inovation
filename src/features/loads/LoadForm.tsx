@@ -2,7 +2,7 @@ import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
 import { useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, Keyboard, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Chip } from '@/components/Chip';
 import { CollapsibleSection, Field, Half, NumericField, Row, Segmented } from '@/components/Form';
@@ -20,6 +20,7 @@ import {
   SEATING_DIE_OPTIONS,
   SIZING_DIE_OPTIONS,
 } from '@/data/componentCatalog';
+import { crumb } from '@/lib/crashLog';
 import { parseDecimal } from '@/lib/parse';
 import { BulletCatalogModal } from '@/features/loads/BulletCatalogModal';
 import {
@@ -92,11 +93,15 @@ type Props = {
   defaultRifleId?: string | null;
   submitLabel: string;
   /**
-   * Persists the load and navigates away. A rejection is shown as "Save failed"
-   * and leaves the form (and its unsaved-changes guard) exactly as it was.
+   * Persists the load. A rejection is shown as "Save failed" and leaves the
+   * form (and its unsaved-changes guard) exactly as it was. The returned
+   * function, if any, is what leaves the screen: the form runs it on the next
+   * tick, after it has dropped its guard and let the save's re-render settle.
    */
-  onSubmit: (result: LoadFormResult) => void | Promise<void>;
+  onSubmit: (result: LoadFormResult) => void | AfterSave | Promise<void | AfterSave>;
 };
+
+export type AfterSave = () => void;
 
 /** Renders its own Screen so the save button can live in the pinned footer. */
 export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLabel, onSubmit }: Props) {
@@ -391,9 +396,11 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       return;
     }
     setErrors({});
+    Keyboard.dismiss();
+    crumb(`load form: save tapped (${initialLoad ? 'edit ' + initialLoad.id : 'new'})`);
     setSubmitting(true);
     try {
-      await onSubmit({
+      const after = await onSubmit({
         meta: { name: name.trim(), cartridge: str(cartridge), rifleId },
         components: {
           bulletMake: str(bulletMake),
@@ -452,8 +459,16 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           assemblyNotes: str(assemblyNotes),
         },
       });
+      crumb('load form: saved');
       setSaved(true);
+      if (after) {
+        setTimeout(() => {
+          crumb('load form: leaving screen');
+          after();
+        }, 0);
+      }
     } catch (e) {
+      crumb(`load form: save failed: ${e instanceof Error ? e.message : String(e)}`);
       Alert.alert('Save failed', e instanceof Error ? e.message : String(e));
     } finally {
       setSubmitting(false);
