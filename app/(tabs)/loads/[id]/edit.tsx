@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
 import { loadByIdQuery, updateLoad, versionsForLoadQuery } from '@/db/repositories/loads';
+import { crumb } from '@/lib/crashLog';
 import { LoadForm } from '@/features/loads/LoadForm';
 
 export default function EditLoadScreen() {
@@ -28,26 +29,35 @@ export default function EditLoadScreen() {
   const currentVersion = versions.find((v) => v.id === load.currentVersionId) ?? versions[0];
 
   return (
-    <Screen underHeader>
-      <LoadForm
-        initialLoad={load}
-        initialVersion={currentVersion}
-        submitLabel="Save Changes"
-        onSubmit={async ({ meta, components }) => {
-          try {
-            const { createdNewVersion } = await updateLoad(load.id, meta, components);
-            if (createdNewVersion) {
-              Alert.alert(
-                'New version created',
-                'This load had range history, so your changes were saved as a new version. Past results stay tied to the recipe that produced them.',
-              );
-            }
+    <LoadForm
+      initialLoad={load}
+      initialVersion={currentVersion}
+      submitLabel="Save Changes"
+      onSubmit={async ({ meta, components }) => {
+        // A thrown error is shown by the form as "Save failed".
+        const { createdNewVersion } = await updateLoad(load.id, meta, components);
+        crumb(`edit load: updateLoad done, newVersion=${createdNewVersion}`);
+        if (!createdNewVersion) return () => router.back();
+        // Leave only once the alert is gone. Raising a native dialog in the
+        // same tick as a native-stack pop overlaps two fragment transactions
+        // on the one Android activity; sequencing them also reads better.
+        return () => {
+          let left = false;
+          const leave = () => {
+            if (left) return;
+            left = true;
+            crumb('edit load: alert dismissed, going back');
             router.back();
-          } catch (e) {
-            Alert.alert('Save failed', e instanceof Error ? e.message : String(e));
-          }
-        }}
-      />
-    </Screen>
+          };
+          crumb('edit load: showing new-version alert');
+          Alert.alert(
+            'New version created',
+            'This load had range history, so your changes were saved as a new version. Past results stay tied to the recipe that produced them.',
+            [{ text: 'OK', onPress: leave }],
+            { cancelable: true, onDismiss: leave },
+          );
+        };
+      }}
+    />
   );
 }

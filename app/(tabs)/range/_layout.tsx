@@ -15,6 +15,7 @@ export default function RangeLayout() {
       <Stack.Screen name="sessions/new" options={{ title: 'New Session' }} />
       <Stack.Screen name="sessions/[id]" options={{ title: 'Session' }} />
       <Stack.Screen name="cards/[rifleId]" options={{ title: 'Range Card' }} />
+      <Stack.Screen name="compare/[rifleId]" options={{ title: 'Compare Loads' }} />
     </Stack>
   );
 }

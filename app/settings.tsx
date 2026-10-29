@@ -1,7 +1,7 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
 import { useState } from 'react';
-import { Alert, Text } from 'react-native';
+import { Alert, Share, Text } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
@@ -9,8 +9,9 @@ import { AddFromBackupModal } from '@/features/backup/AddFromBackupModal';
 import { SyncCard } from '@/features/sync/SyncCard';
 import { addFromBackup } from '@/db/repositories/importBackup';
 import { buildBackup, exportBackup, restoreBackup } from '@/lib/backup';
+import { clearCrashReport, formatCrashReport, readCrashReport, type CrashReport } from '@/lib/crashLog';
 import { describeBackup, parseBackup, type BackupSummary, type ImportSelection } from '@/lib/share';
-import { spacing, type } from '@/theme';
+import { colors, spacing, type } from '@/theme';
 
 /** Open a JSON file from the device and return its text, or null if cancelled. */
 async function pickJsonFile(): Promise<string | null> {
@@ -29,6 +30,7 @@ export default function SettingsScreen() {
   const [pending, setPending] = useState<{ json: string; summary: BackupSummary } | null>(null);
   const [adding, setAdding] = useState(false);
   const busy = exporting || importing || adding;
+  const [crash, setCrash] = useState<CrashReport | null>(() => readCrashReport());
 
   const doExport = async () => {
     setExporting(true);
@@ -127,6 +129,36 @@ export default function SettingsScreen() {
 
   return (
     <Screen underHeader>
+      {crash ? (
+        <Card>
+          <Text style={type.heading}>Last crash</Text>
+          <Text style={[type.secondary, { marginTop: spacing.sm }]}>
+            The app closed unexpectedly on {new Date(crash.at).toLocaleString()}. Share this report
+            with whoever is fixing it; the last actions before the crash are included.
+          </Text>
+          <Text
+            style={[type.caption, { fontFamily: 'monospace', color: colors.text, marginVertical: spacing.md }]}
+            selectable
+            numberOfLines={12}
+          >
+            {formatCrashReport(crash)}
+          </Text>
+          <Button
+            label="Share Report"
+            onPress={() => void Share.share({ message: formatCrashReport(crash) })}
+          />
+          <Button
+            label="Dismiss"
+            variant="secondary"
+            onPress={() => {
+              clearCrashReport();
+              setCrash(null);
+            }}
+            style={{ marginTop: spacing.md }}
+          />
+        </Card>
+      ) : null}
+
       <SyncCard />
 
       <Card>
