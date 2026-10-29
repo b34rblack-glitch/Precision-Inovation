@@ -62,6 +62,21 @@ export default function RangeScreen() {
                 </View>
               </Card>
             ))}
+            <Card onPress={() => router.push(`/range/compare/${cardRifles[0]!.id}`)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons
+                  name="stats-chart-outline"
+                  size={22}
+                  color={colors.accent}
+                  style={{ marginRight: spacing.md }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={type.body}>Compare loads</Text>
+                  <Text style={type.secondary}>Velocity, groups, holds and ladders, one rifle at a time</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+              </View>
+            </Card>
             <Text style={[type.label, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>
               Sessions
             </Text>

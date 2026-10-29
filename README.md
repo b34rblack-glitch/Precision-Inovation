@@ -23,7 +23,10 @@ to real range results. This app is built around exactly that missing loop:
    **●**, predictions **○**. One tap trues muzzle velocity against your confirmed
    long-range holds. Cards come in **Bench** and **Hunting** presets, a high-contrast
    **field mode** (amber on black, huge digits, screen stays awake), and **PDF export**
-   sized for a stock pack.
+   sized for a stock pack. **Compare loads** puts every load tested in a rifle side by
+   side: velocity (average, SD, ES), velocity over time, group size by distance, logged
+   elevation holds and the latest charge ladder, with hide/show per load, date and
+   distance sliders, a minimum-shots filter and a tap-to-read hairline on every chart.
 
 **Share a rifle.** Any rifle can be exported on its own, with its loads, sessions, DOPE and
 range cards, as a file a friend adds to their app from Settings → Add from Backup. Adding

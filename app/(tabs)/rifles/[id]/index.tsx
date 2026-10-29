@@ -128,6 +128,14 @@ export default function RifleDetailScreen() {
         onPress={() => router.push(`/range/cards/${rifle.id}`)}
         style={{ marginBottom: spacing.md }}
       />
+      {rifleLoads.length > 0 ? (
+        <Button
+          label="Compare Loads"
+          variant="secondary"
+          onPress={() => router.push(`/range/compare/${rifle.id}`)}
+          style={{ marginBottom: spacing.md }}
+        />
+      ) : null}
       <Button
         label="Share Rifle"
         variant="secondary"
