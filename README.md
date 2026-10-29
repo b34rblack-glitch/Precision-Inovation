@@ -56,6 +56,9 @@ npm test             # Vitest: units, atmosphere, solver, merge, workup stats
 npm run typecheck    # tsc --noEmit
 ```
 
+See `ANDROID_BUILD.md` for the installable Android APK that every push builds, and
+`IOS_BUILD.md` for iPhone.
+
 Database schema lives in `src/db/schema.ts`; regenerate migrations with
 `npx drizzle-kit generate` after schema changes. This repo is the only place
 migrations are generated — the desktop app vendors the same `.sql` files.
