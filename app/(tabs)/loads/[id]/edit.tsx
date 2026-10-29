@@ -28,26 +28,35 @@ export default function EditLoadScreen() {
   const currentVersion = versions.find((v) => v.id === load.currentVersionId) ?? versions[0];
 
   return (
-    <Screen underHeader>
-      <LoadForm
-        initialLoad={load}
-        initialVersion={currentVersion}
-        submitLabel="Save Changes"
-        onSubmit={async ({ meta, components }) => {
-          try {
-            const { createdNewVersion } = await updateLoad(load.id, meta, components);
-            if (createdNewVersion) {
-              Alert.alert(
-                'New version created',
-                'This load had range history, so your changes were saved as a new version. Past results stay tied to the recipe that produced them.',
-              );
-            }
-            router.back();
-          } catch (e) {
-            Alert.alert('Save failed', e instanceof Error ? e.message : String(e));
-          }
-        }}
-      />
-    </Screen>
+    <LoadForm
+      initialLoad={load}
+      initialVersion={currentVersion}
+      submitLabel="Save Changes"
+      onSubmit={async ({ meta, components }) => {
+        // A thrown error is shown by the form as "Save failed".
+        const { createdNewVersion } = await updateLoad(load.id, meta, components);
+        if (!createdNewVersion) {
+          router.back();
+          return;
+        }
+        // Leave only once the alert is gone. This screen used to raise the
+        // dialog and pop itself in the same tick; a native dialog and a
+        // native-stack pop are both fragment transactions on the one Android
+        // activity, and that overlap is the likeliest cause of the app closing
+        // on save. Sequencing them also reads better: acknowledge, then leave.
+        let left = false;
+        const leave = () => {
+          if (left) return;
+          left = true;
+          router.back();
+        };
+        Alert.alert(
+          'New version created',
+          'This load had range history, so your changes were saved as a new version. Past results stay tied to the recipe that produced them.',
+          [{ text: 'OK', onPress: leave }],
+          { cancelable: true, onDismiss: leave },
+        );
+      }}
+    />
   );
 }

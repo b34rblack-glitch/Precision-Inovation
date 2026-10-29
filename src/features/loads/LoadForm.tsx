@@ -6,6 +6,7 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Chip } from '@/components/Chip';
 import { CollapsibleSection, Field, Half, NumericField, Row, Segmented } from '@/components/Form';
+import { Screen } from '@/components/Screen';
 import { LoadComponentValues } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { Load, LoadVersion } from '@/db/schema';
@@ -90,9 +91,14 @@ type Props = {
   /** Preselects a rifle when creating a new load (ignored when editing). */
   defaultRifleId?: string | null;
   submitLabel: string;
+  /**
+   * Persists the load and navigates away. A rejection is shown as "Save failed"
+   * and leaves the form (and its unsaved-changes guard) exactly as it was.
+   */
   onSubmit: (result: LoadFormResult) => void | Promise<void>;
 };
 
+/** Renders its own Screen so the save button can live in the pinned footer. */
 export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLabel, onSubmit }: Props) {
   const navigation = useNavigation();
   const { data: rifles } = useLiveQuery(activeRiflesQuery());
@@ -195,6 +201,10 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
 
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
+  // Once a save has gone through the guard stays down for good: the screen is
+  // on its way out, and the live query that refreshes `initialVersion` may land
+  // after the navigation, so `dirty` cannot be trusted to settle in time.
+  const [saved, setSaved] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [powderPickerOpen, setPowderPickerOpen] = useState(false);
   const [primerPickerOpen, setPrimerPickerOpen] = useState(false);
@@ -271,8 +281,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
     assemblyNotes !== (initialVersion?.assemblyNotes ?? '');
 
   // While submitting the guard is down so the post-save navigation goes through;
-  // a failed save re-arms it (submitting resets to false).
-  usePreventRemove(dirty && !submitting, ({ data }) => {
+  // a failed save re-arms it (submitting resets to false, saved stays false).
+  usePreventRemove(dirty && !submitting && !saved, ({ data }) => {
     Alert.alert('Discard changes?', 'You have unsaved edits on this load.', [
       { text: 'Keep Editing', style: 'cancel' },
       { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
@@ -442,13 +452,16 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           assemblyNotes: str(assemblyNotes),
         },
       });
+      setSaved(true);
+    } catch (e) {
+      Alert.alert('Save failed', e instanceof Error ? e.message : String(e));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <View>
+    <Screen underHeader footer={<Button label={submitLabel} onPress={submit} loading={submitting} />}>
       <Text style={[type.secondary, styles.formHint]}>
         Only Name is required — fill in as much or as little of the rest as you track.
       </Text>
@@ -1068,8 +1081,6 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         old results stay tied to the exact recipe that produced them.
       </Text>
 
-      <Button label={submitLabel} onPress={submit} loading={submitting} />
-
       <BulletCatalogModal
         visible={catalogOpen}
         onClose={() => setCatalogOpen(false)}
@@ -1124,7 +1135,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         onClose={() => setPressPickerOpen(false)}
         onSelect={setPressName}
       />
-    </View>
+    </Screen>
   );
 }
 
