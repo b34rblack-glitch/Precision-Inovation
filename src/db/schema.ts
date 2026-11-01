@@ -122,6 +122,34 @@ export const landsMeasurements = sqliteTable(
   (t) => [index('lands_measurements_rifle_idx').on(t.rifleId)],
 );
 
+// What is on the user's bench: the components and tools the pickers should
+// show first. A row is either ticked by hand on the My Bench screen or
+// learned from a saved load. Bullets carry their own fields so a custom
+// bullet can fill the load form like a catalog one; everything else is a
+// name. No foreign keys: the bench is independent of any rifle or load.
+export const benchItems = sqliteTable(
+  'bench_items',
+  {
+    id: id(),
+    kind: text('kind', {
+      enum: ['bullet', 'powder', 'primer', 'brass', 'sizingDie', 'seatingDie', 'press'],
+    }).notNull(),
+    /** Display name; for bullets "Make Model Weight gr". Matched case-insensitively. */
+    name: text('name').notNull(),
+    /** Dies are for one cartridge; the load form sorts matching dies first. */
+    cartridge: text('cartridge'),
+    source: text('source', { enum: ['manual', 'learned'] }).notNull().default('manual'),
+    bulletMake: text('bullet_make'),
+    bulletModel: text('bullet_model'),
+    bulletWeightGr: real('bullet_weight_gr'),
+    bulletDiameterIn: real('bullet_diameter_in'),
+    bcValue: real('bc_value'),
+    bcModel: text('bc_model', { enum: ['G1', 'G7'] }),
+    ...timestamps,
+  },
+  (t) => [index('bench_items_kind_idx').on(t.kind)],
+);
+
 export const loads = sqliteTable(
   'loads',
   {
@@ -469,6 +497,9 @@ export const syncState = sqliteTable('sync_state', {
 
 export type Rifle = typeof rifles.$inferSelect;
 export type NewRifle = typeof rifles.$inferInsert;
+export type BenchItem = typeof benchItems.$inferSelect;
+export type NewBenchItem = typeof benchItems.$inferInsert;
+export type BenchKind = BenchItem['kind'];
 export type LandsMeasurement = typeof landsMeasurements.$inferSelect;
 export type NewLandsMeasurement = typeof landsMeasurements.$inferInsert;
 export type Load = typeof loads.$inferSelect;

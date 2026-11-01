@@ -3,6 +3,7 @@
   "exportedAt": "2026-10-29T12:00:00.000Z",
   "app": "precision-innovation",
   "tables": {
+    "benchItems": [],
     "rifles": [],
     "landsMeasurements": [],
     "loads": [

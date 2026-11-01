@@ -1,5 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker';
 import { File, Paths } from 'expo-file-system';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Share, Text } from 'react-native';
 import { Button } from '@/components/Buttons';
@@ -24,6 +25,7 @@ async function pickJsonFile(): Promise<string | null> {
 }
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   // "Add from backup": the parsed file waits here while the picker is open.
@@ -158,6 +160,16 @@ export default function SettingsScreen() {
           />
         </Card>
       ) : null}
+
+      <Card>
+        <Text style={type.heading}>My bench</Text>
+        <Text style={[type.secondary, { marginTop: spacing.sm, marginBottom: spacing.lg }]}>
+          Tick the bullets, powders, primers, brass, dies and presses you own, add gear the catalogs
+          lack, and tag dies with their cartridge. Load pickers then open on your bench instead of
+          the whole list.
+        </Text>
+        <Button label="Open My Bench" variant="secondary" onPress={() => router.push('/bench')} />
+      </Card>
 
       <SyncCard />
 

@@ -252,6 +252,7 @@ export function buildLoads(): Backup {
     exportedAt: STAMP.toISOString(),
     app: 'precision-innovation',
     tables: {
+      benchItems: [],
       rifles: [],
       landsMeasurements: [],
       loads: sets.map((s) => s.load),

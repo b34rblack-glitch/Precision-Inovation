@@ -139,6 +139,7 @@ export default function RootLayout() {
           options={{ headerShown: false, presentation: 'fullScreenModal' }}
         />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+        <Stack.Screen name="bench" options={{ title: 'My Bench' }} />
       </Stack>
     </>
   );

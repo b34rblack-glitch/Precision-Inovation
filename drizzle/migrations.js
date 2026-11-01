@@ -9,6 +9,7 @@ import m0004 from './0004_skinny_doctor_octopus.sql';
 import m0005 from './0005_gorgeous_smasher.sql';
 import m0006 from './0006_perpetual_vengeance.sql';
 import m0007 from './0007_rifle_chamber_lands.sql';
+import m0008 from './0008_bench_items.sql';
 
   export default {
     journal,
@@ -20,7 +21,8 @@ m0003,
 m0004,
 m0005,
 m0006,
-m0007
+m0007,
+m0008
     }
   }
   

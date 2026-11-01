@@ -11,7 +11,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { CollapsibleSection } from '@/components/Form';
 import { Screen } from '@/components/Screen';
 import { landsForRifleQuery } from '@/db/repositories/lands';
-import { archiveLoad, loadByIdQuery, versionsForLoadQuery } from '@/db/repositories/loads';
+import { archiveLoad, duplicateLoad, loadByIdQuery, versionsForLoadQuery } from '@/db/repositories/loads';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
 import { workupsForLoadQuery } from '@/db/repositories/workups';
 import { ingredientRows, recipeRows, recipeStages } from '@/features/loads/recipe';
@@ -45,6 +45,7 @@ export default function LoadDetailScreen() {
   const { data: rifleRows } = useLiveQuery(rifleByIdQuery(assignedRifleId), [assignedRifleId]);
   const { data: lands } = useLiveQuery(landsForRifleQuery(assignedRifleId), [assignedRifleId]);
   const [printing, setPrinting] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
   const load = loadRows[0];
   if (!load) {
     // updatedAt is undefined until the live query's first emission — stay blank
@@ -91,6 +92,20 @@ export default function LoadDetailScreen() {
       Alert.alert('Could not make the sheet', e instanceof Error ? e.message : String(e));
     } finally {
       setPrinting(false);
+    }
+  };
+
+  // A copy to tweak: same rifle, cartridge and recipe, no history.
+  const duplicate = async () => {
+    if (duplicating) return;
+    setDuplicating(true);
+    try {
+      const copy = await duplicateLoad(load.id);
+      router.push(`/loads/${copy.id}/edit`);
+    } catch (e) {
+      Alert.alert('Could not duplicate', e instanceof Error ? e.message : String(e));
+    } finally {
+      setDuplicating(false);
     }
   };
 
@@ -183,13 +198,10 @@ export default function LoadDetailScreen() {
       ) : null}
 
       {current ? (
-        <Button
-          label="Print Recipe Sheet"
-          variant="secondary"
-          onPress={printRecipe}
-          loading={printing}
-          style={{ marginBottom: spacing.md }}
-        />
+        <View style={{ flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md }}>
+          <Button label="Print Recipe Sheet" variant="secondary" onPress={printRecipe} loading={printing} style={{ flex: 1 }} />
+          <Button label="Duplicate" variant="secondary" onPress={duplicate} loading={duplicating} />
+        </View>
       ) : null}
       <Button
         label="Start a Workup"

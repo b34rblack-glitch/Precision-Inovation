@@ -108,6 +108,7 @@ describe('Phoenix workspace import file', () => {
     const db = freshDatabase();
     const counts = restore(db, json);
     expect(counts).toEqual({
+      benchItems: 0,
       rifles: 2,
       landsMeasurements: 5,
       loads: 2,

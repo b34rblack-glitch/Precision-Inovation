@@ -380,6 +380,7 @@ export function buildWorkspace(): Backup {
     exportedAt: STAMP.toISOString(),
     app: 'precision-innovation',
     tables: {
+      benchItems: [],
       rifles: sets.map((s) => s.rifle),
       landsMeasurements: sets.flatMap((s) => s.lands),
       loads: sets.map((s) => s.load),

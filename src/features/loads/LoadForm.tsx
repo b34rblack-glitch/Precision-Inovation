@@ -7,12 +7,15 @@ import { Button } from '@/components/Buttons';
 import { Chip } from '@/components/Chip';
 import { CollapsibleSection, Field, Half, NumericField, Row, Segmented } from '@/components/Form';
 import { Screen } from '@/components/Screen';
+import { addBenchItem, benchItemsQuery } from '@/db/repositories/bench';
 import { landsForRifleQuery } from '@/db/repositories/lands';
 import { LoadComponentValues } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { Load, LoadVersion } from '@/db/schema';
-import { ListPickerModal } from '@/components/ListPickerModal';
-import { bestBc, CatalogBullet } from '@/data/bulletCatalog';
+import { ListPickerModal, type PickerBench } from '@/components/ListPickerModal';
+import type { BenchKind } from '@/db/schema';
+import { CARTRIDGE_KINDS } from '@/lib/bench/model';
+
 import {
   BRASS_OPTIONS,
   POWDER_OPTIONS,
@@ -30,7 +33,7 @@ import {
   latestLandsForBullet,
   sizedHeadspace,
 } from '@/lib/rifle/profile';
-import { BulletCatalogModal } from '@/features/loads/BulletCatalogModal';
+import { BulletCatalogModal, type PickedBullet } from '@/features/loads/BulletCatalogModal';
 import {
   filledStageKeys,
   fromYesNo,
@@ -124,6 +127,27 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
   // magazine length) and its lands log supplies this bullet's touch reading.
   const rifle = rifles.find((r) => r.id === rifleId) ?? null;
   const { data: lands } = useLiveQuery(landsForRifleQuery(rifleId ?? ''), [rifleId]);
+  // The bench: pickers open on what is there and sort this cartridge's dies first.
+  const { data: bench } = useLiveQuery(benchItemsQuery());
+  const pickerCartridge = cartridge.trim() || rifle?.cartridge || null;
+  const benchFor = (kind: BenchKind): PickerBench => ({
+    kind,
+    items: bench,
+    cartridge: pickerCartridge,
+    onAddCustom: async (name) => {
+      await addBenchItem({
+        kind,
+        name,
+        cartridge: CARTRIDGE_KINDS.has(kind) ? pickerCartridge : null,
+        bulletMake: null,
+        bulletModel: null,
+        bulletWeightGr: null,
+        bulletDiameterIn: null,
+        bcValue: null,
+        bcModel: null,
+      });
+    },
+  });
 
   const [bulletMake, setBulletMake] = useState(initialVersion?.bulletMake ?? '');
   const [bulletModel, setBulletModel] = useState(initialVersion?.bulletModel ?? '');
@@ -311,16 +335,15 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
 
   // Catalog pick prefills the bullet's make/model/weight and its best BC
   // (G7 preferred). Every field stays editable afterward.
-  const applyCatalogBullet = (bullet: CatalogBullet) => {
+  const applyCatalogBullet = (bullet: PickedBullet) => {
     setBulletMake(bullet.maker);
     setBulletModel(bullet.model);
-    setBulletWeight(bullet.weightGr.toString());
+    setBulletWeight(bullet.weightGr != null ? bullet.weightGr.toString() : '');
     // The catalog knows diameter but not length — length stays hand-entered.
-    setBulletDiameter(bullet.diameterIn.toString());
-    const bc = bestBc(bullet);
-    if (bc) {
-      setBcValue(bc.bcValue.toString());
-      setBcModel(bc.bcModel);
+    if (bullet.diameterIn != null) setBulletDiameter(bullet.diameterIn.toString());
+    if (bullet.bcValue != null) {
+      setBcValue(bullet.bcValue.toString());
+      if (bullet.bcModel) setBcModel(bullet.bcModel);
     }
     setErrors((e) => ({ ...e, bulletWeight: undefined, bcValue: undefined, bulletDiameter: undefined }));
   };
@@ -1199,12 +1222,14 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
 
       <BulletCatalogModal
         visible={catalogOpen}
+        benchItems={bench}
         onClose={() => setCatalogOpen(false)}
         onSelect={applyCatalogBullet}
       />
       <ListPickerModal
         visible={powderPickerOpen}
         title="Powders"
+        bench={benchFor('powder')}
         options={POWDER_OPTIONS}
         placeholder="Search h4350, varget, RL16…"
         footer="Product names only — enter your own worked-up charge weight. Always start from published load data and watch for pressure."
@@ -1214,6 +1239,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       <ListPickerModal
         visible={primerPickerOpen}
         title="Primers"
+        bench={benchFor('primer')}
         options={PRIMER_OPTIONS}
         placeholder="Search CCI, 210M, magnum…"
         onClose={() => setPrimerPickerOpen(false)}
@@ -1222,6 +1248,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       <ListPickerModal
         visible={brassPickerOpen}
         title="Brass"
+        bench={benchFor('brass')}
         options={BRASS_OPTIONS}
         placeholder="Search Lapua, Peterson…"
         onClose={() => setBrassPickerOpen(false)}
@@ -1230,6 +1257,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       <ListPickerModal
         visible={sizingDiePickerOpen}
         title="Sizing Dies"
+        bench={benchFor('sizingDie')}
         options={SIZING_DIE_OPTIONS}
         placeholder="Search Redding, bushing, body…"
         onClose={() => setSizingDiePickerOpen(false)}
@@ -1238,6 +1266,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       <ListPickerModal
         visible={seatingDiePickerOpen}
         title="Seating Dies"
+        bench={benchFor('seatingDie')}
         options={SEATING_DIE_OPTIONS}
         placeholder="Search Wilson, micrometer, arbor…"
         onClose={() => setSeatingDiePickerOpen(false)}
@@ -1246,6 +1275,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       <ListPickerModal
         visible={pressPickerOpen}
         title="Presses"
+        bench={benchFor('press')}
         options={PRESS_OPTIONS}
         placeholder="Search Co-Ax, arbor, turret…"
         onClose={() => setPressPickerOpen(false)}

@@ -17,6 +17,7 @@ function fixture(): BackupTables {
   const t = '2026-10-04T17:00:00.000Z';
   const base = { createdAt: t, updatedAt: t };
   const tables: BackupTables = {
+    benchItems: [{ id: 'bench-1', kind: 'powder', name: 'Hodgdon H1000', source: 'manual', ...base }],
     rifles: [
       { id: 'rifle-a', name: 'A', photoUri: 'file:///a.jpg', photoSha256: 'abc', archivedAt: null, ...base },
       { id: 'rifle-b', name: 'B', photoUri: null, photoSha256: null, archivedAt: t, ...base },

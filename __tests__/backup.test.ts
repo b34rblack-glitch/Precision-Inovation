@@ -17,6 +17,7 @@ import { chunkRows, INSERT_CHUNK_SIZE, TABLE_ORDER } from '@/lib/backup';
 
 // Child table -> parent tables it references via FK (mirrors src/db/schema.ts).
 const FK_PARENTS: Record<string, string[]> = {
+  benchItems: [],
   rifles: [],
   landsMeasurements: ['rifles'],
   loads: ['rifles'],

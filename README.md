@@ -20,7 +20,10 @@ to real range results. This app is built around exactly that missing loop:
    chrono velocities, highlights **velocity flat spots**, and lets you promote the winning
    charge to a new load version in one tap. **Print Recipe Sheet** turns the current
    version into a PDF with bench targets, ingredients, every stage with tick boxes and a
-   batch log, so the load can be built without the phone.
+   batch log, so the load can be built without the phone. **My Bench** (Settings) holds
+   what you own: tick catalog items or add your own, tag dies by cartridge, and every
+   picker opens on your bench with the full catalog one tap away; anything saved on a
+   load joins the bench by itself. **Duplicate** copies a load to make a variant.
 3. **Range** — log sessions (conditions, chrono strings, target results) and record the
    holds that actually worked (**DOPE**). The **range card** is hybrid: a built-in
    point-mass ballistic solver (G1/G7) predicts every distance, and your confirmed DOPE

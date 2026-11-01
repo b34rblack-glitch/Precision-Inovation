@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Modal,
@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Chip } from '@/components/Chip';
+import type { BenchItem, BenchKind } from '@/db/schema';
+import { defaultPickerMode, hasItem, pickerOptions, type PickerMode } from '@/lib/bench/model';
 import type { PickerOption } from '@/lib/pickerOption';
 import { colors, radii, spacing, touchTarget, type } from '@/theme';
 
@@ -19,6 +21,20 @@ import { colors, radii, spacing, touchTarget, type } from '@/theme';
 // existing `@/components/ListPickerModal` importers are unaffected.
 export type { PickerOption };
 
+/**
+ * Bench awareness: with this, the picker opens on "Mine" (what the bench
+ * holds of this kind) whenever the bench has anything, with "All" one tap
+ * away, sorts dies tagged for the load's cartridge first, and offers to add
+ * a typed name the catalog does not know.
+ */
+export type PickerBench = {
+  kind: BenchKind;
+  items: readonly BenchItem[];
+  cartridge?: string | null;
+  /** Adds the typed name to the bench; the picker then selects it. */
+  onAddCustom?: (name: string) => Promise<void> | void;
+};
+
 type Props = {
   visible: boolean;
   title: string;
@@ -26,6 +42,7 @@ type Props = {
   placeholder?: string;
   /** Optional footer note (e.g. safety/verification reminder). */
   footer?: string;
+  bench?: PickerBench;
   onClose: () => void;
   onSelect: (value: string) => void;
 };
@@ -37,28 +54,47 @@ export function ListPickerModal({
   options,
   placeholder,
   footer,
+  bench,
   onClose,
   onSelect,
 }: Props) {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [group, setGroup] = useState<string | null>(null);
+  const benchHasKind = !!bench && bench.items.some((i) => i.kind === bench.kind);
+  const [mode, setMode] = useState<PickerMode>('all');
+  // Each opening starts on Mine when the bench has anything of this kind.
+  useEffect(() => {
+    if (visible) setMode(bench ? defaultPickerMode(bench.items, bench.kind) : 'all');
+  }, [visible, bench?.items, bench?.kind]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const listed = useMemo(
+    () => (bench ? pickerOptions(bench.kind, options, bench.items, mode, bench.cartridge) : [...options]),
+    [bench, options, mode],
+  );
 
   const groups = useMemo(() => {
     const seen: string[] = [];
-    for (const o of options) if (o.group && !seen.includes(o.group)) seen.push(o.group);
+    for (const o of listed) if (o.group && !seen.includes(o.group)) seen.push(o.group);
     return seen;
-  }, [options]);
+  }, [listed]);
+
+  const trimmed = query.trim();
+  const canAdd =
+    !!bench?.onAddCustom &&
+    trimmed.length > 1 &&
+    !options.some((o) => o.value.toLowerCase() === trimmed.toLowerCase()) &&
+    !hasItem(bench.items, bench.kind, trimmed);
 
   const results = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    return options.filter((o) => {
+    return listed.filter((o) => {
       if (group && o.group !== group) return false;
       if (terms.length === 0) return true;
       const hay = `${o.value} ${o.group ?? ''} ${o.note ?? ''}`.toLowerCase();
       return terms.every((t) => hay.includes(t));
     });
-  }, [options, query, group]);
+  }, [listed, query, group]);
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
@@ -95,6 +131,13 @@ export function ListPickerModal({
           ) : null}
         </View>
 
+        {benchHasKind ? (
+          <View style={styles.groupRow}>
+            <Chip label="Mine" selected={mode === 'mine'} onPress={() => setMode('mine')} />
+            <Chip label="All" selected={mode === 'all'} onPress={() => setMode('all')} />
+          </View>
+        ) : null}
+
         {groups.length > 1 ? (
           <View style={styles.groupRow}>
             <Chip label="All" selected={group === null} onPress={() => setGroup(null)} />
@@ -109,8 +152,28 @@ export function ListPickerModal({
           keyExtractor={(o, i) => `${o.value}-${i}`}
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
+          ListHeaderComponent={
+            canAdd ? (
+              <Pressable
+                onPress={async () => {
+                  await bench!.onAddCustom!(trimmed);
+                  onSelect(trimmed);
+                  onClose();
+                }}
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+              >
+                <Ionicons name="add-circle-outline" size={20} color={colors.accent} />
+                <Text style={[type.body, { flex: 1, color: colors.accent }]}>
+                  Add “{trimmed}” to my bench
+                </Text>
+              </Pressable>
+            ) : null
+          }
           ListEmptyComponent={
-            <Text style={[type.secondary, styles.empty]}>Nothing matches your search.</Text>
+            <Text style={[type.secondary, styles.empty]}>
+              {mode === 'mine' && !query ? 'Nothing of this kind on your bench yet. Tap All.' : 'Nothing matches your search.'}
+            </Text>
           }
           renderItem={({ item }) => (
             <Pressable
