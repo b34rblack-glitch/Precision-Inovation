@@ -325,6 +325,7 @@ export function buildWorkspace(): Backup {
       shots: [],
       dopeEntries: sets.map((s) => s.dope),
       rangeCards: sets.map((s) => s.card),
+      targetPhotos: [],
     },
   };
 }

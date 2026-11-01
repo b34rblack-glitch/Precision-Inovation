@@ -62,6 +62,14 @@ const DEFAULTS: Partial<Record<TableName, Record<string, unknown>>> = {
     spinDriftEnabled: true,
     archivedAt: null,
   },
+  targetPhotos: {
+    workupId: 'workup-1',
+    workupStepId: null,
+    sessionId: null,
+    fileName: 'photo-1.jpg',
+    sha256: null,
+    caption: null,
+  },
 };
 
 export function row(

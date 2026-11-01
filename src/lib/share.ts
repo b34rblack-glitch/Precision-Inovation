@@ -196,10 +196,24 @@ const SOFT_REFS: readonly FkEdge[] = [
 /** Device-local paths and the hashes of blobs that do not travel in the file. */
 const DEVICE_LOCAL_KEYS = new Set(['photoUri', 'photoSha256', 'targetPhotoUri', 'targetPhotoSha256']);
 
-/** Blank photo references: the bytes are not in the file, so they mean nothing elsewhere. */
+/**
+ * Tables whose every row is a reference to a device-local file. A target photo
+ * row without its bytes is a broken thumbnail on the receiving phone, so the
+ * rows are left out of a shared file entirely rather than blanked.
+ */
+const DEVICE_LOCAL_TABLES: ReadonlySet<TableName> = new Set<TableName>(['targetPhotos']);
+
+/**
+ * Blank photo references and drop photo rows: the bytes are not in the file,
+ * so they mean nothing elsewhere.
+ */
 export function stripDeviceLocal(tables: BackupTables): BackupTables {
   const out = {} as BackupTables;
   for (const tbl of TABLE_ORDER) {
+    if (DEVICE_LOCAL_TABLES.has(tbl)) {
+      out[tbl] = [];
+      continue;
+    }
     out[tbl] = (tables[tbl] ?? []).map((row) => {
       const keys = Object.keys(row).filter((k) => DEVICE_LOCAL_KEYS.has(k) && row[k] != null);
       if (keys.length === 0) return row;

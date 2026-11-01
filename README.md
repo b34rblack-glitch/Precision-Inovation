@@ -15,7 +15,10 @@ to real range results. This app is built around exactly that missing loop:
    you through **ladder**, **OCW**, and **velocity (Satterlee)** tests: the app generates
    the charge series, gives you per-charge entry sheets, computes SD/ES from per-shot
    chrono velocities, highlights **velocity flat spots**, and lets you promote the winning
-   charge to a new load version in one tap.
+   charge to a new load version in one tap. **Photograph the target** as you shoot: every
+   workup keeps a gallery of target photos, each pinned to the charge it shows or to the
+   whole target (a tall-target ladder, an OCW sheet), stored on the device with the rest of
+   the load's history.
 3. **Range** — log sessions (conditions, chrono strings, target results) and record the
    holds that actually worked (**DOPE**). The **range card** is hybrid: a built-in
    point-mass ballistic solver (G1/G7) predicts every distance, and your confirmed DOPE
@@ -56,6 +59,12 @@ npm run typecheck    # tsc --noEmit
 Database schema lives in `src/db/schema.ts`; regenerate migrations with
 `npx drizzle-kit generate` after schema changes. This repo is the only place
 migrations are generated — the desktop app vendors the same `.sql` files.
+
+Target photos are copied into `<document directory>/target-photos/` and rows
+store only the file name (`src/lib/photoFiles.ts`), because the iOS sandbox
+path changes on every app update. Photos stay on the device: they are not in
+a shared rifle file and do not yet sync (the row carries a SHA-256 so they can
+once blob sync lands).
 
 Every write goes through `src/db/mutate.ts`, which stamps a logical timestamp
 and records tombstones for deletes. `__tests__/sync/funnel.test.ts` fails the

@@ -294,6 +294,37 @@ export const dopeEntries = sqliteTable(
   (t) => [index('dope_entries_session_idx').on(t.sessionId)],
 );
 
+// A photograph of a target (or a chronograph screen) taken at the range.
+// Owned by a workup — optionally pinned to one of its charge steps — or by a
+// range session. A whole-target photo (a tall-target ladder, an OCW sheet with
+// every aim point on it) has a workupId and no workupStepId; a photo of one
+// charge's group has both.
+//
+// fileName is relative to the app's own target-photo directory, never an
+// absolute path: on iOS the sandbox path changes on every app update, so an
+// absolute file:// URI stored today is broken tomorrow. The directory and
+// URI resolution live in src/lib/photoFiles.ts.
+export const targetPhotos = sqliteTable(
+  'target_photos',
+  {
+    id: id(),
+    workupId: text('workup_id').references(() => workups.id),
+    workupStepId: text('workup_step_id').references(() => workupSteps.id),
+    sessionId: text('session_id').references(() => rangeSessions.id),
+    fileName: text('file_name').notNull(),
+    // See rifles.photoSha256: the hash is what will travel once blob sync
+    // lands, letting a peer fetch the bytes and write its own fileName.
+    sha256: text('sha256'),
+    caption: text('caption'),
+    ...timestamps,
+  },
+  (t) => [
+    index('target_photos_workup_idx').on(t.workupId),
+    index('target_photos_step_idx').on(t.workupStepId),
+    index('target_photos_session_idx').on(t.sessionId),
+  ],
+);
+
 // Card configuration only — rows are always computed at render/export time by
 // merging solver output with confirmed dopeEntries.
 export const rangeCards = sqliteTable(
@@ -338,7 +369,7 @@ export const rangeCards = sqliteTable(
 // ---------------------------------------------------------------------------
 // Sync bookkeeping
 //
-// Deliberately a sidecar rather than columns on the ten data tables:
+// Deliberately a sidecar rather than columns on the eleven data tables:
 //   - tombstones must outlive their rows, which a column on the row cannot do
 //     without soft-deleting — and soft deletes would break the range_cards
 //     unique index and every isNull(archivedAt) query in the app;
@@ -412,6 +443,8 @@ export type RangeSession = typeof rangeSessions.$inferSelect;
 export type NewRangeSession = typeof rangeSessions.$inferInsert;
 export type DopeEntry = typeof dopeEntries.$inferSelect;
 export type NewDopeEntry = typeof dopeEntries.$inferInsert;
+export type TargetPhoto = typeof targetPhotos.$inferSelect;
+export type NewTargetPhoto = typeof targetPhotos.$inferInsert;
 export type RangeCard = typeof rangeCards.$inferSelect;
 export type NewRangeCard = typeof rangeCards.$inferInsert;
 export type SyncRowMeta = typeof syncRowMeta.$inferSelect;

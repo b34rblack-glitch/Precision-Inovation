@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
 import { addShotString, deleteShotString } from '@/db/repositories/sessions';
+import { photosForWorkupQuery } from '@/db/repositories/targetPhotos';
 import {
   archiveWorkup,
   promoteChargeToVersion,
@@ -21,9 +22,23 @@ import {
   updateWorkupStatus,
   workupByIdQuery,
 } from '@/db/repositories/workups';
-import { WorkupStep } from '@/db/schema';
+import { TargetPhoto, WorkupStep } from '@/db/schema';
+import { PhotoSourceButtons } from '@/features/workups/PhotoSourceButtons';
+import { PhotoThumb } from '@/features/workups/PhotoThumb';
+import { TargetPhotoGallery } from '@/features/workups/TargetPhotoGallery';
+import {
+  PhotoPermissionError,
+  pickTargetPhoto,
+  removeTargetPhoto,
+  saveTargetPhoto,
+  setTargetPhotoCaption,
+  setTargetPhotoStep,
+  type PhotoSource,
+} from '@/features/workups/targetPhotos';
+import { TargetPhotoViewer } from '@/features/workups/TargetPhotoViewer';
 import { parseDecimal, parseVelocityList } from '@/lib/parse';
 import { ydToDistance } from '@/lib/units';
+import { formatChargeGr } from '@/lib/workup/format';
 import { ChargePoint, findFlatSpots } from '@/lib/workup/stats';
 import { colors, radii, spacing, touchTarget, type } from '@/theme';
 
@@ -41,13 +56,20 @@ function StepCard({
   step,
   showGroup,
   summary,
+  photos,
+  photoBusy,
   onSaveVelocities,
   onSaveResult,
   onClearString,
+  onPickPhoto,
+  onOpenPhoto,
 }: {
   step: WorkupStep;
   showGroup: boolean;
   summary: { avgFps: number | null; sdFps: number | null; esFps: number | null; shotCount: number | null } | null;
+  /** Photos pinned to this charge. */
+  photos: TargetPhoto[];
+  photoBusy: boolean;
   onSaveVelocities: (velocities: number[]) => Promise<void>;
   onSaveResult: (result: {
     groupSizeIn: number | null;
@@ -55,6 +77,8 @@ function StepCard({
     poiYIn: number | null;
   }) => Promise<void>;
   onClearString: () => Promise<void>;
+  onPickPhoto: (source: PhotoSource) => void;
+  onOpenPhoto: (photo: TargetPhoto) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [velText, setVelText] = useState('');
@@ -129,8 +153,9 @@ function StepCard({
     summary?.avgFps != null ||
     step.groupSizeIn != null ||
     step.poiXIn != null ||
-    step.poiYIn != null;
-  const chargeLabel = `${step.chargeGr.toFixed(2).replace(/0$/, '')} gr`;
+    step.poiYIn != null ||
+    photos.length > 0;
+  const chargeLabel = formatChargeGr(step.chargeGr);
 
   return (
     <Card>
@@ -143,7 +168,8 @@ function StepCard({
           `${step.chargeGr} grains, ` +
           (summary?.avgFps != null
             ? `average ${Math.round(summary.avgFps)} feet per second`
-            : 'no data yet')
+            : 'no data yet') +
+          (photos.length > 0 ? `, ${photos.length} ${photos.length === 1 ? 'photo' : 'photos'}` : '')
         }
       >
         <Text style={[type.heading, { fontVariant: ['tabular-nums'] }]}>{chargeLabel}</Text>
@@ -166,6 +192,14 @@ function StepCard({
             </Text>
           ) : null}
         </View>
+        {photos.length > 0 ? (
+          <View style={styles.photoCount}>
+            <Ionicons name="camera" size={16} color={colors.textSecondary} />
+            {photos.length > 1 ? (
+              <Text style={[type.caption, { fontVariant: ['tabular-nums'] }]}>{photos.length}</Text>
+            ) : null}
+          </View>
+        ) : null}
         <Ionicons
           name={hasData ? 'checkmark-circle' : open ? 'chevron-up' : 'chevron-down'}
           size={22}
@@ -244,6 +278,23 @@ function StepCard({
               </Row>
             </>
           ) : null}
+          <Text style={[type.label, { marginTop: spacing.md }]}>Target photo</Text>
+          <View style={styles.photoRow}>
+            {photos.map((photo) => (
+              <PhotoThumb
+                key={photo.id}
+                photo={photo}
+                size={64}
+                onPress={() => onOpenPhoto(photo)}
+              />
+            ))}
+            <PhotoSourceButtons
+              onPick={onPickPhoto}
+              busy={photoBusy}
+              subject={`the ${chargeLabel} group`}
+              compact
+            />
+          </View>
           <View style={{ flexDirection: 'row', gap: spacing.md, marginTop: spacing.md }}>
             <Button label="Save" onPress={save} loading={saving} style={{ flex: 1 }} />
             {summary?.avgFps != null ? (
@@ -325,12 +376,29 @@ export default function WorkupDetailScreen() {
   const { data: workupRows, updatedAt } = useLiveQuery(workupByIdQuery(wid), [wid]);
   const { data: steps } = useLiveQuery(stepsForWorkupQuery(wid), [wid]);
   const { data: stepStrings } = useLiveQuery(stringsForStepsQuery(wid), [wid]);
+  const { data: photos } = useLiveQuery(photosForWorkupQuery(wid), [wid]);
   const workup = workupRows[0];
   // The test distance is stored canonical (yd); display it in the rifle's unit.
   const { data: rifleRows } = useLiveQuery(rifleByIdQuery(workup?.rifleId ?? ''), [workup?.rifleId]);
   const distanceUnit = rifleRows[0]?.distanceUnit ?? 'yd';
   const [promoting, setPromoting] = useState(false);
   const [completing, setCompleting] = useState(false);
+  // Which photo slot is mid-pick: a step id, 'target' for the gallery, or idle.
+  const [addingPhotoFor, setAddingPhotoFor] = useState<string | null>(null);
+  const [viewingPhotoId, setViewingPhotoId] = useState<string | null>(null);
+
+  const photosByStep = useMemo(() => {
+    const map = new Map<string, TargetPhoto[]>();
+    for (const photo of photos) {
+      if (photo.workupStepId == null) continue;
+      const list = map.get(photo.workupStepId);
+      if (list) list.push(photo);
+      else map.set(photo.workupStepId, [photo]);
+    }
+    return map;
+  }, [photos]);
+  // Resolved from the live rows so a caption save or re-pin shows at once.
+  const viewingPhoto = photos.find((p) => p.id === viewingPhotoId) ?? null;
 
   const summaries = useMemo(() => {
     const map = new Map<
@@ -378,6 +446,26 @@ export default function WorkupDetailScreen() {
     );
   }
   const showGroup = workup.type === 'ocw' || workup.type === 'ladder';
+
+  const addPhoto = async (source: PhotoSource, stepId: string | null) => {
+    if (addingPhotoFor !== null) return;
+    setAddingPhotoFor(stepId ?? 'target');
+    try {
+      const asset = await pickTargetPhoto(source);
+      if (!asset) return;
+      await saveTargetPhoto(asset, { workupId: workup.id, workupStepId: stepId });
+      // A photo of the target means shooting has started, same as a string.
+      if (workup.status === 'planned') await updateWorkupStatus(workup.id, 'in_progress');
+    } catch (e) {
+      if (e instanceof PhotoPermissionError) {
+        Alert.alert('Camera access needed', e.message);
+      } else {
+        Alert.alert('Could not add photo', e instanceof Error ? e.message : String(e));
+      }
+    } finally {
+      setAddingPhotoFor(null);
+    }
+  };
 
   const promote = (chargeGr: number) => {
     if (promoting) return;
@@ -461,6 +549,14 @@ export default function WorkupDetailScreen() {
         </Text>
       </Card>
 
+      <TargetPhotoGallery
+        photos={photos}
+        steps={steps}
+        busy={addingPhotoFor === 'target'}
+        onPick={(source) => addPhoto(source, null)}
+        onOpen={(photo) => setViewingPhotoId(photo.id)}
+      />
+
       {chargePoints.length >= 3 ? (
         <Card>
           <Text style={[type.label, { marginBottom: spacing.sm }]}>Velocity vs charge</Text>
@@ -514,6 +610,10 @@ export default function WorkupDetailScreen() {
             step={step}
             showGroup={showGroup}
             summary={summaries.get(step.id) ?? null}
+            photos={photosByStep.get(step.id) ?? []}
+            photoBusy={addingPhotoFor === step.id}
+            onPickPhoto={(source) => addPhoto(source, step.id)}
+            onOpenPhoto={(photo) => setViewingPhotoId(photo.id)}
             onSaveVelocities={async (velocities) => {
               const existing = summaries.get(step.id);
               if (existing) await deleteShotString(existing.id);
@@ -547,6 +647,15 @@ export default function WorkupDetailScreen() {
         ) : null}
         <Button label="Archive Workup" variant="danger" onPress={confirmArchive} />
       </View>
+
+      <TargetPhotoViewer
+        photo={viewingPhoto}
+        steps={steps}
+        onClose={() => setViewingPhotoId(null)}
+        onCaption={(caption) => setTargetPhotoCaption(viewingPhoto!.id, caption)}
+        onPin={(stepId) => setTargetPhotoStep(viewingPhoto!.id, stepId)}
+        onDelete={() => removeTargetPhoto(viewingPhoto!)}
+      />
     </Screen>
   );
 }
@@ -567,6 +676,14 @@ const styles = StyleSheet.create({
   },
   errorText: { ...type.caption, color: colors.danger, marginTop: spacing.xs },
   previewText: { ...type.caption, color: colors.textSecondary, marginTop: spacing.xs },
+  photoCount: { flexDirection: 'row', alignItems: 'center', gap: 2, marginRight: spacing.sm },
+  photoRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
   flatRow: {
     flexDirection: 'row',
     alignItems: 'center',

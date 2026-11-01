@@ -118,6 +118,7 @@ describe('Phoenix workspace import file', () => {
       shots: 0,
       dopeEntries: 2,
       rangeCards: 2,
+      targetPhotos: 0,
     });
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
 

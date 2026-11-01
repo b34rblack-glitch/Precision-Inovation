@@ -28,6 +28,14 @@
       "expo-router",
       "expo-sqlite",
       "expo-sharing",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Precision Innovation uses the camera to photograph your targets at the range and keep them with the workup or session they belong to.",
+          "photosPermission": "Precision Innovation reads a photo you choose so it can be attached to a workup or range session.",
+          "microphonePermission": false
+        }
+      ],
       "expo-font",
       "@react-native-google-signin/google-signin"
     ],

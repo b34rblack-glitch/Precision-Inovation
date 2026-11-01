@@ -5,6 +5,7 @@ import {
   FK_EDGES,
   MAX_BIND_BUDGET,
   onMissingParent,
+  OWNER_COLUMNS,
   TABLE_ORDER,
   TABLES,
   UNIQUE_KEYS,
@@ -45,12 +46,28 @@ describe('table metadata', () => {
     expect(policy('workups', 'baseVersionId')).toBe('null');
     expect(policy('rangeSessions', 'loadVersionId')).toBe('null');
     expect(policy('shotStrings', 'sessionId')).toBe('null');
+    expect(policy('targetPhotos', 'workupId')).toBe('null');
+    expect(policy('targetPhotos', 'workupStepId')).toBe('null');
+    expect(policy('targetPhotos', 'sessionId')).toBe('null');
 
     // NOT NULL: no choice but to drop the orphan.
     expect(policy('loadVersions', 'loadId')).toBe('drop');
     expect(policy('shots', 'stringId')).toBe('drop');
     expect(policy('dopeEntries', 'sessionId')).toBe('drop');
     expect(policy('rangeCards', 'loadVersionId')).toBe('drop');
+  });
+
+  it('OWNER_COLUMNS lists every nullable FK of an owned table, and nothing else', () => {
+    // The merge engine drops a row once every owner column is null; that is
+    // only sound if the listed columns are exactly the table's foreign keys and
+    // every one of them is nullable (a NOT NULL FK would have dropped the row
+    // already).
+    expect(Object.keys(OWNER_COLUMNS).sort()).toEqual(['shotStrings', 'targetPhotos']);
+    for (const [tbl, cols] of Object.entries(OWNER_COLUMNS)) {
+      const edges = FK_EDGES.filter((e) => e.tbl === tbl);
+      expect([...cols!].sort()).toEqual(edges.map((e) => e.col).sort());
+      for (const e of edges) expect(onMissingParent(e)).toBe('null');
+    }
   });
 
   it('knows the range_cards unique key — the schema’s only one', () => {
