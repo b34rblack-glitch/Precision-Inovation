@@ -171,6 +171,15 @@ export default function SettingsScreen() {
         <Button label="Open My Bench" variant="secondary" onPress={() => router.push('/bench')} />
       </Card>
 
+      <Card>
+        <Text style={type.heading}>Load form fields</Text>
+        <Text style={[type.secondary, { marginTop: spacing.sm, marginBottom: spacing.lg }]}>
+          Hide the parts of the load form you never use. Simple shows what most loaders track; any
+          group with data on a load always shows.
+        </Text>
+        <Button label="Choose Fields" variant="secondary" onPress={() => router.push('/form-fields')} />
+      </Card>
+
       <SyncCard />
 
       <Card>

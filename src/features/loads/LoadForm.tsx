@@ -1,8 +1,9 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { useState } from 'react';
-import { Alert, Keyboard, StyleSheet, Text, View } from 'react-native';
+import { createContext, useContext, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Alert, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Chip } from '@/components/Chip';
 import { CollapsibleSection, Field, Half, NumericField, Row, Segmented } from '@/components/Form';
@@ -24,6 +25,14 @@ import {
   SEATING_DIE_OPTIONS,
   SIZING_DIE_OPTIONS,
 } from '@/data/componentCatalog';
+import {
+  FORM_GROUP_BY_KEY,
+  groupHasData,
+  isGroupVisible,
+  stageHasVisibleGroups,
+  type FormGroupKey,
+  type FormPrefs,
+} from '@/features/loads/formGroups';
 import { crumb } from '@/lib/crashLog';
 import { parseDecimal } from '@/lib/parse';
 import {
@@ -46,6 +55,7 @@ import {
   YES_NO,
   YesNo,
 } from '@/features/loads/recipe';
+import { useFormPrefs } from '@/stores/formPrefsStore';
 import { colors, spacing, type } from '@/theme';
 
 export type LoadFormResult = {
@@ -239,6 +249,22 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
     initialVersion?.loadedRoundWeightGr?.toString() ?? '',
   );
   const [assemblyNotes, setAssemblyNotes] = useState(initialVersion?.assemblyNotes ?? '');
+
+  // Which optional groups this loader shows. A group with data always shows.
+  const formPrefs = useFormPrefs();
+  const prefs = useMemo<FormPrefs>(
+    () => ({ mode: formPrefs.mode, notUsed: new Set(formPrefs.notUsed) }),
+    [formPrefs.mode, formPrefs.notUsed],
+  );
+  // G reads these through context so its component type stays stable across
+  // renders (a component defined inside render would remount its inputs on
+  // every keystroke and drop the keyboard).
+  const groupCtx = useMemo<GroupContextValue>(
+    () => ({ prefs, version: initialVersion, setNotUsed: formPrefs.setNotUsed }),
+    [prefs, initialVersion, formPrefs.setNotUsed],
+  );
+  const stageShown = (stage: Parameters<typeof stageHasVisibleGroups>[0], always = false) =>
+    stageHasVisibleGroups(stage, prefs, initialVersion, always);
 
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -512,8 +538,19 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
 
   return (
     <Screen underHeader footer={<Button label={submitLabel} onPress={submit} loading={submitting} />}>
+      <GroupContext.Provider value={groupCtx}>
       <Text style={[type.secondary, styles.formHint]}>
         Only Name is required — fill in as much or as little of the rest as you track.
+      </Text>
+      <Segmented
+        label="Fields"
+        options={['Simple', 'Full'] as const}
+        value={formPrefs.mode === 'simple' ? 'Simple' : 'Full'}
+        onChange={(v) => formPrefs.setMode(v === 'Simple' ? 'simple' : 'full')}
+      />
+      <Text style={[type.caption, { marginTop: -spacing.sm, marginBottom: spacing.lg, color: colors.textTertiary }]}>
+        Simple shows what most loaders track. Tap “Not used” on any group to hide it for good;
+        anything with data always shows. Change it later under Settings → Load form fields.
       </Text>
       <Field
         label="Name *"
@@ -637,6 +674,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         <Button label="Choose Brass" variant="secondary" onPress={() => setBrassPickerOpen(true)} />
       </CollapsibleSection>
 
+      {stageShown('bulletDetail') ? (
+      <G id="bulletDetail">
       <CollapsibleSection title="Bullet ballistics detail" initiallyOpen={bulletDetailFilled}>
         <Text style={[type.secondary, styles.sectionHint]}>
           Length + diameter enable the spin-drift estimate on range cards.
@@ -699,12 +738,16 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           </Text>
         ) : null}
       </CollapsibleSection>
+      </G>
+      ) : null}
 
+      {stageShown('casePrep') ? (
       <CollapsibleSection title={STAGE_TITLES.casePrep} initiallyOpen={filledStages.has('casePrep')}>
+        <G id="caseLot">
+          <Field label="Case lot #" value={caseLot} onChangeText={setCaseLot} placeholder="Lot 4823" />
+        </G>
+        <G id="caseSorting">
         <Row>
-          <Half>
-            <Field label="Case lot #" value={caseLot} onChangeText={setCaseLot} placeholder="Lot 4823" />
-          </Half>
           <Half>
             <NumericField
               label="Case weight"
@@ -717,8 +760,6 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
               error={errors.caseWeight}
             />
           </Half>
-        </Row>
-        <Row>
           <Half>
             <NumericField
               label="Case volume"
@@ -731,6 +772,10 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
               error={errors.caseVolume}
             />
           </Half>
+        </Row>
+        </G>
+        <G id="trimming">
+        <Row>
           <Half>
             <NumericField
               label="Trim length"
@@ -744,14 +789,18 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
               error={errors.caseTrimLength}
             />
           </Half>
+          <Half>
+            <Field
+              label="Trimmed with"
+              value={caseTrimmedTo}
+              onChangeText={setCaseTrimmedTo}
+              placeholder="Giraud"
+              autoCapitalize="words"
+            />
+          </Half>
         </Row>
-        <Field
-          label="Trimmed with"
-          value={caseTrimmedTo}
-          onChangeText={setCaseTrimmedTo}
-          placeholder="Giraud"
-          autoCapitalize="words"
-        />
+        </G>
+        <G id="neckTurning">
         <Row>
           <Half>
             <Segmented label="Neck turned" options={YES_NO} value={neckTurned} onChange={setNeckTurned} />
@@ -770,6 +819,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
+        </G>
+        <G id="pocketPrep">
         <Row>
           <Half>
             <Segmented
@@ -788,6 +839,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
+        </G>
+        <G id="annealing">
         <Row>
           <Half>
             <Segmented label="Annealed" options={YES_NO} value={annealed} onChange={setAnnealed} />
@@ -801,6 +854,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
+        </G>
+        <G id="casePrepNotes">
         <Field
           label="Prep notes"
           value={casePrepNotes}
@@ -808,9 +863,13 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           multiline
           placeholder="Chamfer, deburr, pocket uniforming…"
         />
+        </G>
       </CollapsibleSection>
+      ) : null}
 
+      {stageShown('sizing') ? (
       <CollapsibleSection title={STAGE_TITLES.sizing} initiallyOpen={filledStages.has('sizing')}>
+        <G id="sizingDie">
         <Field
           label="Sizing die"
           value={sizingDie}
@@ -830,6 +889,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           value={sizingDieType}
           onChange={setSizingDieType}
         />
+        </G>
+        <G id="bushingMandrel">
         <Row>
           <Half>
             <NumericField
@@ -858,6 +919,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
+        </G>
+        <G id="shoulderBump">
         <NumericField
           label="Shoulder bump"
           value={shoulderBump}
@@ -880,12 +943,16 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             })()}
           </Text>
         ) : null}
+        </G>
+        <G id="lube">
         <Field
           label="Lube"
           value={lubeMethod}
           onChangeText={setLubeMethod}
           placeholder="Imperial wax, graphite necks"
         />
+        </G>
+        <G id="press">
         <Field
           label="Press"
           value={pressName}
@@ -893,81 +960,78 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           placeholder="Forster Co-Ax"
           autoCapitalize="words"
         />
-        <Button label="Choose Press" variant="secondary" onPress={() => setPressPickerOpen(true)} />
+        <Button label="Choose Press" variant="secondary" onPress={() => setPressPickerOpen(true)} style={{ marginBottom: spacing.lg }} />
+        </G>
       </CollapsibleSection>
+      ) : null}
 
+      {stageShown('priming') ? (
       <CollapsibleSection title={STAGE_TITLES.priming} initiallyOpen={filledStages.has('priming')}>
         <Text style={[type.secondary, styles.sectionHint]}>
           The primer itself is in Ingredients — this is the lot and how deep it seated.
         </Text>
-        <Row>
-          <Half>
-            <Field label="Primer lot #" value={primerLot} onChangeText={setPrimerLot} placeholder="Lot 91-2" />
-          </Half>
-          <Half>
-            <NumericField
-              label="Below flush"
-              value={primerSeatingDepth}
-              onChangeText={(v) => {
-                setPrimerSeatingDepth(v);
-                clearError('primerSeatingDepth');
-              }}
-              suffix="in"
-              placeholder="0.003"
-              error={errors.primerSeatingDepth}
-            />
-          </Half>
-        </Row>
+        <G id="primerLot">
+          <Field label="Primer lot #" value={primerLot} onChangeText={setPrimerLot} placeholder="Lot 91-2" />
+        </G>
+        <G id="primerSeating">
+          <NumericField
+            label="Seated below flush"
+            value={primerSeatingDepth}
+            onChangeText={(v) => {
+              setPrimerSeatingDepth(v);
+              clearError('primerSeatingDepth');
+            }}
+            suffix="in"
+            placeholder="0.003"
+            error={errors.primerSeatingDepth}
+          />
+        </G>
       </CollapsibleSection>
+      ) : null}
 
       <CollapsibleSection title={STAGE_TITLES.charging} initiallyOpen={filledStages.has('charging')}>
         <Text style={[type.secondary, styles.sectionHint]}>
           The powder is picked in Ingredients; the charge weight is the same number in both places.
         </Text>
-        <Row>
-          <Half>
-            <NumericField
-              label="Charge weight"
-              value={chargeGr}
-              onChangeText={(v) => {
-                setChargeGr(v);
-                clearError('chargeGr');
-              }}
-              suffix="gr"
-              placeholder="76.5"
-              error={errors.chargeGr}
-            />
-          </Half>
-          <Half>
-            <Field
-              label="Charge method"
-              value={chargeMethod}
-              onChangeText={setChargeMethod}
-              placeholder="Autotrickler V4"
-            />
-          </Half>
-        </Row>
-        <Row>
-          <Half>
-            <Field label="Powder lot #" value={powderLot} onChangeText={setPowderLot} placeholder="Lot 8021" />
-          </Half>
-          <Half>
-            <NumericField
-              label="Tolerance (±)"
-              value={chargeVariance}
-              onChangeText={(v) => {
-                setChargeVariance(v);
-                clearError('chargeVariance');
-              }}
-              suffix="gr"
-              placeholder="0.02"
-              error={errors.chargeVariance}
-            />
-          </Half>
-        </Row>
+        <NumericField
+          label="Charge weight"
+          value={chargeGr}
+          onChangeText={(v) => {
+            setChargeGr(v);
+            clearError('chargeGr');
+          }}
+          suffix="gr"
+          placeholder="76.5"
+          error={errors.chargeGr}
+        />
+        <G id="chargeMethod">
+          <Field
+            label="Charge method"
+            value={chargeMethod}
+            onChangeText={setChargeMethod}
+            placeholder="Autotrickler V4"
+          />
+        </G>
+        <G id="powderLot">
+          <Field label="Powder lot #" value={powderLot} onChangeText={setPowderLot} placeholder="Lot 8021" />
+        </G>
+        <G id="chargeTolerance">
+          <NumericField
+            label="Tolerance (±)"
+            value={chargeVariance}
+            onChangeText={(v) => {
+              setChargeVariance(v);
+              clearError('chargeVariance');
+            }}
+            suffix="gr"
+            placeholder="0.02"
+            error={errors.chargeVariance}
+          />
+        </G>
       </CollapsibleSection>
 
       <CollapsibleSection title={STAGE_TITLES.seating} initiallyOpen={filledStages.has('seating')}>
+        <G id="seatingDie">
         <Field
           label="Seating die"
           value={seatingDie}
@@ -987,6 +1051,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           onChangeText={setSeatingMicrometer}
           placeholder="4.5 on the dial"
         />
+        </G>
         <Row>
           <Half>
             <NumericField
@@ -1074,38 +1139,37 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             </View>
           );
         })()}
-        <Row>
-          <Half>
-            <NumericField
-              label="Jump to lands"
-              value={jumpToLands}
-              onChangeText={(v) => {
-                setJumpToLands(v);
-                clearError('jumpToLands');
-              }}
-              suffix="in"
-              signed
-              placeholder="0.020"
-              error={errors.jumpToLands}
-            />
-          </Half>
-          <Half>
-            <NumericField
-              label="Neck tension"
-              value={neckTension}
-              onChangeText={(v) => {
-                setNeckTension(v);
-                clearError('neckTension');
-              }}
-              suffix="in"
-              placeholder="0.002"
-              error={errors.neckTension}
-            />
-          </Half>
-        </Row>
-        <Text style={[type.secondary, styles.sectionHint]}>
-          Jump is measured off the lands — enter a negative value if the bullet is jammed in.
-        </Text>
+        <G id="jump">
+          <NumericField
+            label="Jump to lands"
+            value={jumpToLands}
+            onChangeText={(v) => {
+              setJumpToLands(v);
+              clearError('jumpToLands');
+            }}
+            suffix="in"
+            signed
+            placeholder="0.020"
+            error={errors.jumpToLands}
+          />
+          <Text style={[type.secondary, styles.sectionHint]}>
+            Jump is measured off the lands — enter a negative value if the bullet is jammed in.
+          </Text>
+        </G>
+        <G id="neckTension">
+          <NumericField
+            label="Neck tension"
+            value={neckTension}
+            onChangeText={(v) => {
+              setNeckTension(v);
+              clearError('neckTension');
+            }}
+            suffix="in"
+            placeholder="0.002"
+            error={errors.neckTension}
+          />
+        </G>
+        <G id="bulletLot">
         <Row>
           <Half>
             <Field label="Bullet lot #" value={bulletLot} onChangeText={setBulletLot} placeholder="Lot 3390" />
@@ -1119,6 +1183,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
+        </G>
+        <G id="crimp">
         <Row>
           <Half>
             <Field label="Crimp" value={crimp} onChangeText={setCrimp} placeholder="None" />
@@ -1133,36 +1199,35 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
+        </G>
       </CollapsibleSection>
 
       <CollapsibleSection title={STAGE_TITLES.qc} initiallyOpen={filledStages.has('qc')}>
-        <Row>
-          <Half>
-            <NumericField
-              label="Runout (TIR)"
-              value={runout}
-              onChangeText={(v) => {
-                setRunout(v);
-                clearError('runout');
-              }}
-              suffix="in"
-              placeholder="0.001"
-              error={errors.runout}
-            />
-          </Half>
-          <Half>
-            <NumericField
-              label="Loaded weight"
-              value={loadedWeight}
-              onChangeText={(v) => {
-                setLoadedWeight(v);
-                clearError('loadedWeight');
-              }}
-              suffix="gr"
-              error={errors.loadedWeight}
-            />
-          </Half>
-        </Row>
+        <G id="runout">
+          <NumericField
+            label="Runout (TIR)"
+            value={runout}
+            onChangeText={(v) => {
+              setRunout(v);
+              clearError('runout');
+            }}
+            suffix="in"
+            placeholder="0.001"
+            error={errors.runout}
+          />
+        </G>
+        <G id="loadedWeight">
+          <NumericField
+            label="Loaded weight"
+            value={loadedWeight}
+            onChangeText={(v) => {
+              setLoadedWeight(v);
+              clearError('loadedWeight');
+            }}
+            suffix="gr"
+            error={errors.loadedWeight}
+          />
+        </G>
         <NumericField
           label="Muzzle velocity (avg)"
           value={mv}
@@ -1173,6 +1238,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           suffix="fps"
           error={errors.mv}
         />
+        <G id="mvDetail">
         <Row>
           <Half>
             <NumericField
@@ -1205,6 +1271,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         <Text style={[type.secondary, styles.sectionHint]}>
           Range cards shift MV by sensitivity × (session temp − measured-at temp).
         </Text>
+        </G>
         <Field
           label="Assembly notes"
           value={assemblyNotes}
@@ -1281,11 +1348,65 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         onClose={() => setPressPickerOpen(false)}
         onSelect={setPressName}
       />
+      </GroupContext.Provider>
     </Screen>
   );
 }
 
+type GroupContextValue = {
+  prefs: FormPrefs;
+  version: LoadVersion | undefined;
+  setNotUsed: (key: FormGroupKey, notUsed: boolean) => void;
+};
+const GroupContext = createContext<GroupContextValue>({
+  prefs: { mode: 'full', notUsed: new Set() },
+  version: undefined,
+  setNotUsed: () => {},
+});
+
+/**
+ * One optional field group. Shown with a "Not used" link when it has no data;
+ * marked not used, it collapses to a one-line "Show" row in Full mode and
+ * disappears in Simple mode. A group with data on this load always shows.
+ */
+function G({ id, children }: { id: FormGroupKey; children: ReactNode }) {
+  const { prefs, version, setNotUsed } = useContext(GroupContext);
+  const title = FORM_GROUP_BY_KEY[id].title;
+  if (isGroupVisible(id, prefs, version)) {
+    return (
+      <View>
+        {!groupHasData(id, version) ? (
+          <View style={styles.groupHead}>
+            <Text style={[type.caption, { color: colors.textTertiary }]}>{title}</Text>
+            <Pressable onPress={() => setNotUsed(id, true)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`${title}: not used`}>
+              <Text style={styles.groupLink}>Not used</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {children}
+      </View>
+    );
+  }
+  if (prefs.mode === 'full' && prefs.notUsed.has(id)) {
+    return (
+      <Pressable
+        onPress={() => setNotUsed(id, false)}
+        style={styles.groupHidden}
+        accessibilityRole="button"
+        accessibilityLabel={`${title}: not used. Show`}
+      >
+        <Text style={[type.caption, { color: colors.textTertiary, flex: 1 }]}>{title} · not used</Text>
+        <Text style={styles.groupLink}>Show</Text>
+      </Pressable>
+    );
+  }
+  return null;
+}
+
 const styles = StyleSheet.create({
+  groupHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+  groupHidden: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, marginBottom: spacing.sm },
+  groupLink: { color: colors.accent, fontSize: 12, fontWeight: '600' },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   formHint: { marginBottom: spacing.lg, color: colors.textTertiary },
   sectionHint: { marginBottom: spacing.md, color: colors.textTertiary },

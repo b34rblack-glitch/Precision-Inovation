@@ -140,6 +140,7 @@ export default function RootLayout() {
         />
         <Stack.Screen name="settings" options={{ title: 'Settings' }} />
         <Stack.Screen name="bench" options={{ title: 'My Bench' }} />
+        <Stack.Screen name="form-fields" options={{ title: 'Load form fields' }} />
       </Stack>
     </>
   );
