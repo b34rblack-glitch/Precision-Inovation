@@ -15,7 +15,10 @@ import {
   workupsForRifleQuery,
 } from '@/db/repositories/compare';
 import { deleteLandsMeasurement, landsForRifleQuery } from '@/db/repositories/lands';
-import { archiveRifle, rifleByIdQuery, updateRifle } from '@/db/repositories/rifles';
+import { archiveRifle, rifleByIdQuery, unarchiveRifle, updateRifle } from '@/db/repositories/rifles';
+import { deletionSummary, purge } from '@/db/repositories/purge';
+import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
+import { writeSafetyBackup } from '@/lib/backup';
 import { loadsForRifleQuery } from '@/db/repositories/loads';
 import { recentSessionsForRifleQuery } from '@/db/repositories/sessions';
 import { LandsModal, type BulletChoice } from '@/features/rifles/LandsModal';
@@ -48,6 +51,8 @@ export default function RifleDetailScreen() {
   const { data: strings } = useLiveQuery(allShotStringsQuery());
   const [sharing, setSharing] = useState(false);
   const [landsOpen, setLandsOpen] = useState(false);
+  const [deleteText, setDeleteText] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const rifle = data[0];
 
   const firedShots = useMemo(() => {
@@ -86,6 +91,41 @@ export default function RifleDetailScreen() {
       </Screen>
     );
   }
+
+  const unarchive = () =>
+    unarchiveRifle(rifle.id).catch((e) => Alert.alert('Could not unarchive', e instanceof Error ? e.message : String(e)));
+
+  // Delete, two steps: an alert listing what goes, then the name typed back.
+  const startDelete = async () => {
+    try {
+      const { text } = await deletionSummary('rifles', rifle.id);
+      Alert.alert(
+        'Delete this rifle for good?',
+        text
+          ? `Along with it: ${text}. This cannot be undone from the app.`
+          : 'This cannot be undone from the app.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Continue', style: 'destructive', onPress: () => setDeleteText(text) },
+        ],
+      );
+    } catch (e) {
+      Alert.alert('Could not plan the delete', e instanceof Error ? e.message : String(e));
+    }
+  };
+  const finishDelete = async () => {
+    setDeleting(true);
+    try {
+      await writeSafetyBackup('precision-pre-delete-backup.json');
+      await purge('rifles', rifle.id);
+      setDeleteText(null);
+      router.replace('/rifles');
+    } catch (e) {
+      Alert.alert('Delete failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const confirmArchive = () => {
     Alert.alert('Archive rifle?', `"${rifle.name}" will be hidden but its history is kept.`, [
@@ -371,14 +411,31 @@ export default function RifleDetailScreen() {
         ))
       )}
 
-      <Pressable
-        onPress={confirmArchive}
-        style={styles.archiveBtn}
-        accessibilityRole="button"
-        accessibilityLabel="Archive rifle"
-      >
-        <Text style={{ color: colors.danger, fontSize: 15, fontWeight: '600' }}>Archive rifle</Text>
-      </Pressable>
+      {rifle.archivedAt ? (
+        <View style={styles.archivedBox}>
+          <Text style={type.secondary}>This rifle is archived: hidden from lists, kept in full with its loads and sessions.</Text>
+          <Button label="Unarchive" variant="secondary" onPress={() => void unarchive()} style={{ marginTop: spacing.md }} />
+          <Button label="Delete Permanently" variant="danger" onPress={() => void startDelete()} style={{ marginTop: spacing.md }} />
+        </View>
+      ) : (
+        <Pressable
+          onPress={confirmArchive}
+          style={styles.archiveBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Archive rifle"
+        >
+          <Text style={{ color: colors.danger, fontSize: 15, fontWeight: '600' }}>Archive rifle</Text>
+        </Pressable>
+      )}
+      <ConfirmDeleteModal
+        visible={deleteText !== null}
+        noun="rifle"
+        name={rifle.name}
+        takesWith={deleteText ?? ''}
+        busy={deleting}
+        onCancel={() => setDeleteText(null)}
+        onConfirm={() => void finishDelete()}
+      />
     </Screen>
   );
 }
@@ -396,6 +453,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   archiveBtn: { alignItems: 'center', paddingVertical: spacing.xl },
+  archivedBox: { marginVertical: spacing.xl, padding: spacing.lg, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border },
   inlineAction: { alignSelf: 'flex-start', marginTop: spacing.sm },
   link: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },

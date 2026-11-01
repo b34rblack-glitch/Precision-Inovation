@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { newId, now } from '@/db/ids';
 import { deleteRow, insertRow, insertRows, mutate, updateRow } from '@/db/mutate';
@@ -24,6 +24,14 @@ export function activeSessionsQuery() {
     .select()
     .from(rangeSessions)
     .where(isNull(rangeSessions.archivedAt))
+    .orderBy(desc(rangeSessions.date));
+}
+
+export function archivedSessionsQuery() {
+  return db
+    .select()
+    .from(rangeSessions)
+    .where(isNotNull(rangeSessions.archivedAt))
     .orderBy(desc(rangeSessions.date));
 }
 
@@ -188,6 +196,10 @@ export async function updateSession(
   data: Partial<Omit<NewRangeSession, 'id' | 'createdAt' | 'updatedAt'>>,
 ): Promise<void> {
   mutate((tx) => updateRow(tx, 'rangeSessions', id, data));
+}
+
+export async function unarchiveSession(id: string): Promise<void> {
+  mutate((tx) => updateRow(tx, 'rangeSessions', id, { archivedAt: null }));
 }
 
 export async function archiveSession(id: string): Promise<void> {

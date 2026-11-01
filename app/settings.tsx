@@ -1,5 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { File, Paths } from 'expo-file-system';
+import { File } from 'expo-file-system';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Share, Text } from 'react-native';
@@ -9,7 +9,7 @@ import { Screen } from '@/components/Screen';
 import { AddFromBackupModal } from '@/features/backup/AddFromBackupModal';
 import { SyncCard } from '@/features/sync/SyncCard';
 import { addFromBackup } from '@/db/repositories/importBackup';
-import { buildBackup, exportBackup, restoreBackup } from '@/lib/backup';
+import { exportBackup, restoreBackup, writeSafetyBackup } from '@/lib/backup';
 import { clearCrashReport, formatCrashReport, readCrashReport, type CrashReport } from '@/lib/crashLog';
 import { describeBackup, parseBackup, type BackupSummary, type ImportSelection } from '@/lib/share';
 import { colors, spacing, type } from '@/theme';
@@ -43,16 +43,6 @@ export default function SettingsScreen() {
     } finally {
       setExporting(false);
     }
-  };
-
-  // Written to cache right before a restore wipes the database, so a bad
-  // import file can't silently destroy the only copy of the user's data.
-  const writeSafetyBackup = async (): Promise<void> => {
-    const backup = await buildBackup();
-    const file = new File(Paths.cache, 'precision-pre-restore-backup.json');
-    if (file.exists) file.delete();
-    file.create();
-    file.write(JSON.stringify(backup));
   };
 
   // Merge: add selected rifles from a backup or a friend's shared rifle file

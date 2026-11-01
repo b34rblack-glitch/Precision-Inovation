@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, or } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, or } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { newId, now } from '@/db/ids';
 import { deleteRow, insertRow, mutate, updateRow } from '@/db/mutate';
@@ -23,6 +23,10 @@ export type LoadComponentValues = Omit<
 
 export function activeLoadsQuery() {
   return db.select().from(loads).where(isNull(loads.archivedAt)).orderBy(desc(loads.updatedAt));
+}
+
+export function archivedLoadsQuery() {
+  return db.select().from(loads).where(isNotNull(loads.archivedAt)).orderBy(desc(loads.archivedAt));
 }
 
 export function loadsForRifleQuery(rifleId: string) {
@@ -236,6 +240,10 @@ export async function updateLoad(
     updateRow(tx, 'loadVersions', currentId, components);
     return { createdNewVersion: false };
   });
+}
+
+export async function unarchiveLoad(id: string): Promise<void> {
+  mutate((tx) => updateRow(tx, 'loads', id, { archivedAt: null }));
 }
 
 export async function archiveLoad(id: string): Promise<void> {

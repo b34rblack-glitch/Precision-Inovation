@@ -8,7 +8,8 @@ import { Chip } from '@/components/Chip';
 import { EmptyState } from '@/components/EmptyState';
 import { Fab } from '@/components/Buttons';
 import { Screen } from '@/components/Screen';
-import { activeLoadsQuery } from '@/db/repositories/loads';
+import { ArchivedSection } from '@/components/ArchivedSection';
+import { activeLoadsQuery, archivedLoadsQuery, unarchiveLoad } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import {
   cartridgeOptions,
@@ -25,6 +26,7 @@ export default function LoadsScreen() {
   // empty state on it so it doesn't flash before data arrives.
   const { data: loads, updatedAt } = useLiveQuery(activeLoadsQuery());
   const { data: rifles } = useLiveQuery(activeRiflesQuery());
+  const { data: archived } = useLiveQuery(archivedLoadsQuery());
   const loading = updatedAt === undefined;
   const rifleName = (id: string | null) => rifles.find((r) => r.id === id)?.name;
 
@@ -55,7 +57,7 @@ export default function LoadsScreen() {
           </Pressable>
         }
       >
-        {loading ? null : loads.length === 0 ? (
+        {loading ? null : loads.length === 0 && archived.length === 0 ? (
           <EmptyState
             icon="flask"
             title="No loads yet"
@@ -175,6 +177,14 @@ export default function LoadsScreen() {
               ))
             )}
           </>
+        )}
+        {loading ? null : (
+          <ArchivedSection
+            noun="load"
+            rows={archived.map((l) => ({ id: l.id, title: l.name, subtitle: l.cartridge, archivedAt: l.archivedAt }))}
+            onOpen={(id) => router.push(`/loads/${id}`)}
+            onUnarchive={unarchiveLoad}
+          />
         )}
       </Screen>
       <Fab onPress={() => router.push('/loads/new')} accessibilityLabel="Add load" />

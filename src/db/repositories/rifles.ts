@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { newId, now } from '@/db/ids';
 import { deleteRow, insertRow, mutate, updateRow } from '@/db/mutate';
@@ -6,6 +6,10 @@ import { NewRifle, Rifle, rifles } from '@/db/schema';
 
 export function activeRiflesQuery() {
   return db.select().from(rifles).where(isNull(rifles.archivedAt)).orderBy(desc(rifles.updatedAt));
+}
+
+export function archivedRiflesQuery() {
+  return db.select().from(rifles).where(isNotNull(rifles.archivedAt)).orderBy(desc(rifles.archivedAt));
 }
 
 export function rifleByIdQuery(id: string) {
@@ -26,6 +30,10 @@ export async function updateRifle(
   data: Partial<Omit<NewRifle, 'id' | 'createdAt' | 'updatedAt'>>,
 ): Promise<void> {
   mutate((tx) => updateRow(tx, 'rifles', id, data));
+}
+
+export async function unarchiveRifle(id: string): Promise<void> {
+  mutate((tx) => updateRow(tx, 'rifles', id, { archivedAt: null }));
 }
 
 export async function archiveRifle(id: string): Promise<void> {

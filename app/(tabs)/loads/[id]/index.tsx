@@ -11,12 +11,16 @@ import { EmptyState } from '@/components/EmptyState';
 import { CollapsibleSection } from '@/components/Form';
 import { Screen } from '@/components/Screen';
 import { landsForRifleQuery } from '@/db/repositories/lands';
-import { archiveLoad, duplicateLoad, loadByIdQuery, versionsForLoadQuery } from '@/db/repositories/loads';
+import { archiveLoad, duplicateLoad, loadByIdQuery, unarchiveLoad, versionsForLoadQuery } from '@/db/repositories/loads';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
-import { workupsForLoadQuery } from '@/db/repositories/workups';
+import { archivedWorkupsForLoadQuery, unarchiveWorkup, workupsForLoadQuery } from '@/db/repositories/workups';
+import { deletionSummary, purge } from '@/db/repositories/purge';
+import { ArchivedSection } from '@/components/ArchivedSection';
+import { ConfirmDeleteModal } from '@/components/ConfirmDeleteModal';
+import { writeSafetyBackup } from '@/lib/backup';
 import { ingredientRows, recipeRows, recipeStages } from '@/features/loads/recipe';
 import { recipeSheetHtml } from '@/lib/loads/recipeSheet';
-import { colors, spacing, type } from '@/theme';
+import { colors, radii, spacing, type } from '@/theme';
 
 function ComponentRow({ label, value }: { label: string; value: string | null }) {
   if (!value) return null;
@@ -41,6 +45,9 @@ export default function LoadDetailScreen() {
   const { data: loadRows, updatedAt } = useLiveQuery(loadByIdQuery(id), [id]);
   const { data: versions } = useLiveQuery(versionsForLoadQuery(id), [id]);
   const { data: loadWorkups } = useLiveQuery(workupsForLoadQuery(id), [id]);
+  const { data: archivedWorkups } = useLiveQuery(archivedWorkupsForLoadQuery(id), [id]);
+  const [deleteText, setDeleteText] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const assignedRifleId = loadRows[0]?.rifleId ?? '';
   const { data: rifleRows } = useLiveQuery(rifleByIdQuery(assignedRifleId), [assignedRifleId]);
   const { data: lands } = useLiveQuery(landsForRifleQuery(assignedRifleId), [assignedRifleId]);
@@ -106,6 +113,41 @@ export default function LoadDetailScreen() {
       Alert.alert('Could not duplicate', e instanceof Error ? e.message : String(e));
     } finally {
       setDuplicating(false);
+    }
+  };
+
+  const unarchive = () =>
+    unarchiveLoad(load.id).catch((e) => Alert.alert('Could not unarchive', e instanceof Error ? e.message : String(e)));
+
+  // Delete, two steps: an alert listing what goes, then the name typed back.
+  const startDelete = async () => {
+    try {
+      const { text } = await deletionSummary('loads', load.id);
+      Alert.alert(
+        'Delete this load for good?',
+        text
+          ? `Along with it: ${text}. Sessions shot with it stay, with the load cleared. This cannot be undone from the app.`
+          : 'This cannot be undone from the app.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Continue', style: 'destructive', onPress: () => setDeleteText(text) },
+        ],
+      );
+    } catch (e) {
+      Alert.alert('Could not plan the delete', e instanceof Error ? e.message : String(e));
+    }
+  };
+  const finishDelete = async () => {
+    setDeleting(true);
+    try {
+      await writeSafetyBackup('precision-pre-delete-backup.json');
+      await purge('loads', load.id);
+      setDeleteText(null);
+      router.replace('/loads');
+    } catch (e) {
+      Alert.alert('Delete failed', e instanceof Error ? e.message : String(e));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -280,14 +322,43 @@ export default function LoadDetailScreen() {
         </>
       ) : null}
 
-      <Pressable
-        onPress={confirmArchive}
-        style={styles.archiveBtn}
-        accessibilityRole="button"
-        accessibilityLabel="Archive load"
-      >
-        <Text style={{ color: colors.danger, fontSize: 15, fontWeight: '600' }}>Archive load</Text>
-      </Pressable>
+      <ArchivedSection
+        noun="workup"
+        rows={archivedWorkups.map((w) => ({
+          id: w.id,
+          title: WORKUP_LABELS[w.type] ?? w.type,
+          subtitle: new Date(w.createdAt).toLocaleDateString(),
+          archivedAt: w.archivedAt,
+        }))}
+        onOpen={(wid) => router.push(`/loads/${load.id}/workups/${wid}`)}
+        onUnarchive={unarchiveWorkup}
+      />
+
+      {load.archivedAt ? (
+        <View style={styles.archivedBox}>
+          <Text style={type.secondary}>This load is archived: hidden from lists, kept in full.</Text>
+          <Button label="Unarchive" variant="secondary" onPress={() => void unarchive()} style={{ marginTop: spacing.md }} />
+          <Button label="Delete Permanently" variant="danger" onPress={() => void startDelete()} style={{ marginTop: spacing.md }} />
+        </View>
+      ) : (
+        <Pressable
+          onPress={confirmArchive}
+          style={styles.archiveBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Archive load"
+        >
+          <Text style={{ color: colors.danger, fontSize: 15, fontWeight: '600' }}>Archive load</Text>
+        </Pressable>
+      )}
+      <ConfirmDeleteModal
+        visible={deleteText !== null}
+        noun="load"
+        name={load.name}
+        takesWith={deleteText ?? ''}
+        busy={deleting}
+        onCancel={() => setDeleteText(null)}
+        onConfirm={() => void finishDelete()}
+      />
     </Screen>
   );
 }
@@ -305,4 +376,5 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   archiveBtn: { alignItems: 'center', paddingVertical: spacing.xl },
+  archivedBox: { marginVertical: spacing.xl, padding: spacing.lg, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border },
 });
