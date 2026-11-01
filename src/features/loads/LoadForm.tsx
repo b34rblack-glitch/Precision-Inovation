@@ -899,14 +899,31 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
 
       <CollapsibleSection title={STAGE_TITLES.charging} initiallyOpen={filledStages.has('charging')}>
         <Text style={[type.secondary, styles.sectionHint]}>
-          Powder and charge weight are in Ingredients — this is how the charge was thrown.
+          The powder is picked in Ingredients; the charge weight is the same number in both places.
         </Text>
-        <Field
-          label="Charge method"
-          value={chargeMethod}
-          onChangeText={setChargeMethod}
-          placeholder="Autotrickler V4"
-        />
+        <Row>
+          <Half>
+            <NumericField
+              label="Charge weight"
+              value={chargeGr}
+              onChangeText={(v) => {
+                setChargeGr(v);
+                clearError('chargeGr');
+              }}
+              suffix="gr"
+              placeholder="76.5"
+              error={errors.chargeGr}
+            />
+          </Half>
+          <Half>
+            <Field
+              label="Charge method"
+              value={chargeMethod}
+              onChangeText={setChargeMethod}
+              placeholder="Autotrickler V4"
+            />
+          </Half>
+        </Row>
         <Row>
           <Half>
             <Field label="Powder lot #" value={powderLot} onChangeText={setPowderLot} placeholder="Lot 8021" />
