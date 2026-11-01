@@ -235,6 +235,55 @@ describe('orphan sweep', () => {
     expect(ids).not.toContain('str1');
     expect(ids).not.toContain('sh1');
   });
+
+  it('drops a target photo that lost every record it could belong to', () => {
+    // A photo belongs to a workup, one of its steps, or a session — all
+    // nullable, so like a shot string it has to be dropped explicitly once
+    // every owner is gone, and tombstoned so no peer brings it back.
+    const result = mergeSnapshots(EMPTY(), [
+      snapshot({
+        device: DEV_B,
+        rows: {
+          targetPhotos: [
+            row('targetPhotos', 'ph1', at(1, DEV_B), {
+              workupId: 'gone',
+              workupStepId: 'also-gone',
+              sessionId: null,
+            }),
+          ],
+        },
+      }),
+    ]);
+
+    const ids = upserts(result.ops).map((o) => (o.row as { id: string }).id);
+    expect(ids).not.toContain('ph1');
+    expect(result.mintTombstones.map((t) => t.id)).toContain('ph1');
+  });
+
+  it('keeps a charge photo as a whole-target photo when only its step is gone', () => {
+    const result = mergeSnapshots(EMPTY(), [
+      snapshot({
+        device: DEV_B,
+        rows: {
+          rifles: [row('rifles', 'rifle-1', at(1, DEV_B))],
+          loads: [row('loads', 'load-1', at(1, DEV_B))],
+          workups: [row('workups', 'workup-1', at(1, DEV_B))],
+          targetPhotos: [
+            row('targetPhotos', 'ph1', at(1, DEV_B), {
+              workupId: 'workup-1',
+              workupStepId: 'deleted-step',
+            }),
+          ],
+        },
+      }),
+    ]);
+
+    expect(rowOf(result.ops, 'targetPhotos', 'ph1')).toMatchObject({
+      workupId: 'workup-1',
+      workupStepId: null,
+    });
+    expect(result.mintTombstones.map((t) => t.id)).not.toContain('ph1');
+  });
 });
 
 // ---------------------------------------------------------------------------
