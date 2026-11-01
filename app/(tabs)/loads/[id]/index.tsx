@@ -1,16 +1,21 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
+import * as Print from 'expo-print';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import * as Sharing from 'expo-sharing';
+import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { CollapsibleSection } from '@/components/Form';
 import { Screen } from '@/components/Screen';
+import { landsForRifleQuery } from '@/db/repositories/lands';
 import { archiveLoad, loadByIdQuery, versionsForLoadQuery } from '@/db/repositories/loads';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
 import { workupsForLoadQuery } from '@/db/repositories/workups';
 import { ingredientRows, recipeRows, recipeStages } from '@/features/loads/recipe';
+import { recipeSheetHtml } from '@/lib/loads/recipeSheet';
 import { colors, spacing, type } from '@/theme';
 
 function ComponentRow({ label, value }: { label: string; value: string | null }) {
@@ -38,6 +43,8 @@ export default function LoadDetailScreen() {
   const { data: loadWorkups } = useLiveQuery(workupsForLoadQuery(id), [id]);
   const assignedRifleId = loadRows[0]?.rifleId ?? '';
   const { data: rifleRows } = useLiveQuery(rifleByIdQuery(assignedRifleId), [assignedRifleId]);
+  const { data: lands } = useLiveQuery(landsForRifleQuery(assignedRifleId), [assignedRifleId]);
+  const [printing, setPrinting] = useState(false);
   const load = loadRows[0];
   if (!load) {
     // updatedAt is undefined until the live query's first emission — stay blank
@@ -60,6 +67,32 @@ export default function LoadDetailScreen() {
   // steps. Stages with nothing recorded are dropped entirely.
   const ingredients = current ? ingredientRows(current) : [];
   const stages = recipeStages(current);
+
+  // A recipe sheet to print and take to the bench: the current version's
+  // targets, ingredients, the numbered stages with tick boxes, a batch log.
+  const printRecipe = async () => {
+    if (!current || printing) return;
+    setPrinting(true);
+    try {
+      const html = recipeSheetHtml({
+        load,
+        version: current,
+        rifle: assignedRifle ?? null,
+        lands,
+        generatedOn: new Date(),
+      });
+      const { uri } = await Print.printToFileAsync({ html });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: 'Recipe sheet' });
+      } else {
+        Alert.alert('Saved', `The recipe sheet was written to ${uri}`);
+      }
+    } catch (e) {
+      Alert.alert('Could not make the sheet', e instanceof Error ? e.message : String(e));
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   const confirmArchive = () => {
     Alert.alert('Archive load?', `"${load.name}" will be hidden but its history is kept.`, [
@@ -149,6 +182,15 @@ export default function LoadDetailScreen() {
         </>
       ) : null}
 
+      {current ? (
+        <Button
+          label="Print Recipe Sheet"
+          variant="secondary"
+          onPress={printRecipe}
+          loading={printing}
+          style={{ marginBottom: spacing.md }}
+        />
+      ) : null}
       <Button
         label="Start a Workup"
         onPress={() => router.push(`/loads/${load.id}/workups/new`)}

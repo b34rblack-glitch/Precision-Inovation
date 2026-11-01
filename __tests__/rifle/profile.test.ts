@@ -46,7 +46,8 @@ describe('seating and sizing arithmetic', () => {
   });
 
   it('sizes headspace by the bump and flags magazine overruns', () => {
-    expect(sizedHeadspace(1.6185, 0.002)).toBe(1.617);
+    expect(sizedHeadspace(1.6185, 0.002)).toBe(1.6165);
+    expect(sizedHeadspace(1.62, 0.0015)).toBe(1.6185);
     expect(exceedsMagazine(3.72, 3.7)).toBe(true);
     expect(exceedsMagazine(3.7, 3.7)).toBe(false);
     expect(exceedsMagazine(null, 3.7)).toBe(false);

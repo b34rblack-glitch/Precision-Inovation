@@ -43,9 +43,12 @@ export const jumpFromTouch = (touchCbtoIn: number, seatedCbtoIn: number): number
 /** Where to seat for a given jump (negative jump = jam). */
 export const cbtoForJump = (touchCbtoIn: number, jumpIn: number): number => thou(touchCbtoIn - jumpIn);
 
-/** The comparator reading a sized case should show after this shoulder bump. */
+/**
+ * The comparator reading a sized case should show after this shoulder bump.
+ * Headspace is read to the half-thousandth, so this keeps four decimals.
+ */
 export const sizedHeadspace = (firedHeadspaceIn: number, bumpIn: number): number =>
-  thou(firedHeadspaceIn - bumpIn);
+  Math.round((firedHeadspaceIn - bumpIn) * 10000) / 10000;
 
 /** True when a loaded round is longer than the magazine allows. */
 export const exceedsMagazine = (coalIn: number | null, magazineMaxCoalIn: number | null): boolean =>
