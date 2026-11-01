@@ -7,6 +7,7 @@ import { Button } from '@/components/Buttons';
 import { Chip } from '@/components/Chip';
 import { CollapsibleSection, Field, Half, NumericField, Row, Segmented } from '@/components/Form';
 import { Screen } from '@/components/Screen';
+import { landsForRifleQuery } from '@/db/repositories/lands';
 import { LoadComponentValues } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { Load, LoadVersion } from '@/db/schema';
@@ -22,6 +23,13 @@ import {
 } from '@/data/componentCatalog';
 import { crumb } from '@/lib/crashLog';
 import { parseDecimal } from '@/lib/parse';
+import {
+  cbtoForJump,
+  exceedsMagazine,
+  jumpFromTouch,
+  latestLandsForBullet,
+  sizedHeadspace,
+} from '@/lib/rifle/profile';
 import { BulletCatalogModal } from '@/features/loads/BulletCatalogModal';
 import {
   filledStageKeys,
@@ -112,6 +120,10 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
   const [name, setName] = useState(initialLoad?.name ?? '');
   const [cartridge, setCartridge] = useState(initialLoad?.cartridge ?? '');
   const [rifleId, setRifleId] = useState<string | null>(initialRifleId);
+  // The chosen rifle's chamber facts drive the checks below (headspace,
+  // magazine length) and its lands log supplies this bullet's touch reading.
+  const rifle = rifles.find((r) => r.id === rifleId) ?? null;
+  const { data: lands } = useLiveQuery(landsForRifleQuery(rifleId ?? ''), [rifleId]);
 
   const [bulletMake, setBulletMake] = useState(initialVersion?.bulletMake ?? '');
   const [bulletModel, setBulletModel] = useState(initialVersion?.bulletModel ?? '');
@@ -834,6 +846,17 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           placeholder="0.002"
           error={errors.shoulderBump}
         />
+        {rifle?.headspaceIn != null ? (
+          <Text style={[type.secondary, styles.sectionHint]}>
+            {(() => {
+              const bump = parseDecimal(shoulderBump);
+              const insert = rifle.headspaceInsert ? ` (${rifle.headspaceInsert})` : '';
+              return bump != null && bump >= 0
+                ? `Fired cases read ${rifle.headspaceIn}"${insert}; a ${bump}" bump sizes to ${sizedHeadspace(rifle.headspaceIn, bump)}".`
+                : `Fired cases read ${rifle.headspaceIn}"${insert} in this rifle. Enter the bump to see the sized reading.`;
+            })()}
+          </Text>
+        ) : null}
         <Field
           label="Lube"
           value={lubeMethod}
@@ -950,6 +973,67 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
+        {rifle && exceedsMagazine(parseDecimal(coal), rifle.magazineMaxCoalIn) ? (
+          <Text style={[type.secondary, styles.warn]}>
+            Longer than the magazine: {rifle.name} feeds up to {rifle.magazineMaxCoalIn}" COAL.
+          </Text>
+        ) : null}
+        {(() => {
+          if (!rifle) return null;
+          const touch = latestLandsForBullet(lands, {
+            make: bulletMake,
+            model: bulletModel,
+            weightGr: parseDecimal(bulletWeight),
+          });
+          if (!touch) {
+            return bulletMake.trim() || bulletModel.trim() ? (
+              <Text style={[type.secondary, styles.sectionHint]}>
+                No distance-to-lands reading for this bullet in {rifle.name}. Log one on the rifle's
+                screen and the jump fills itself here.
+              </Text>
+            ) : null;
+          }
+          const seated = parseDecimal(cbto);
+          const jump = parseDecimal(jumpToLands);
+          const when = new Date(touch.measuredAt).toLocaleDateString();
+          const derivedJump = seated != null ? jumpFromTouch(touch.cbtoIn, seated) : null;
+          const derivedCbto = jump != null ? cbtoForJump(touch.cbtoIn, jump) : null;
+          return (
+            <View style={{ marginBottom: spacing.lg }}>
+              <Text style={[type.secondary, { color: colors.textTertiary }]}>
+                Touches the lands at {touch.cbtoIn.toFixed(3)}" CBTO in {rifle.name} ({when}
+                {touch.roundCount != null ? `, ${touch.roundCount} rds` : ''}).
+                {derivedJump != null
+                  ? ` Seated at ${seated}" that is ${derivedJump < 0 ? `${Math.abs(derivedJump)}" jam` : `${derivedJump}" jump`}.`
+                  : ''}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                {derivedJump != null && String(derivedJump) !== jumpToLands.trim() ? (
+                  <Button
+                    label={`Set jump ${derivedJump}"`}
+                    variant="secondary"
+                    onPress={() => {
+                      setJumpToLands(String(derivedJump));
+                      clearError('jumpToLands');
+                    }}
+                    style={{ flex: 1 }}
+                  />
+                ) : null}
+                {derivedCbto != null && String(derivedCbto) !== cbto.trim() ? (
+                  <Button
+                    label={`Set CBTO ${derivedCbto}"`}
+                    variant="secondary"
+                    onPress={() => {
+                      setCbto(String(derivedCbto));
+                      clearError('cbto');
+                    }}
+                    style={{ flex: 1 }}
+                  />
+                ) : null}
+              </View>
+            </View>
+          );
+        })()}
         <Row>
           <Half>
             <NumericField
@@ -1158,4 +1242,5 @@ const styles = StyleSheet.create({
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   formHint: { marginBottom: spacing.lg, color: colors.textTertiary },
   sectionHint: { marginBottom: spacing.md, color: colors.textTertiary },
+  warn: { marginBottom: spacing.md, color: colors.danger },
 });

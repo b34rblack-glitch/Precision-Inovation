@@ -4,6 +4,7 @@
   "app": "precision-innovation",
   "tables": {
     "rifles": [],
+    "landsMeasurements": [],
     "loads": [
       {
         "id": "7c1e9d3a-5b2f-4c8e-9a1d-300f30b1001",

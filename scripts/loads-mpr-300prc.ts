@@ -253,6 +253,7 @@ export function buildLoads(): Backup {
     app: 'precision-innovation',
     tables: {
       rifles: [],
+      landsMeasurements: [],
       loads: sets.map((s) => s.load),
       loadVersions: sets.map((s) => s.version),
       workups: [],

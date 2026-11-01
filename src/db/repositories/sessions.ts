@@ -10,9 +10,12 @@ import {
   NewRangeSession,
   RangeSession,
   rangeSessions,
+  rifles,
   shots,
   shotStrings,
 } from '@/db/schema';
+import { confirmsZero } from '@/lib/rifle/profile';
+import { distanceToYd } from '@/lib/units';
 import { sampleSd } from '@/lib/workup/stats';
 import { autoSessionId } from '@/sync/autoSession';
 
@@ -201,12 +204,44 @@ export async function archiveSession(id: string): Promise<void> {
   });
 }
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * A confirmed hold at the rifle's zero distance is a zero check: stamp the
+ * rifle with the session date (never moving it backwards), so the detail
+ * screen can say how old the zero is.
+ */
+function noteZeroCheck(tx: Tx, sessionId: string, entry: { distanceYd: number; confirmed: boolean }): void {
+  const [session] = tx
+    .select({ rifleId: rangeSessions.rifleId, date: rangeSessions.date })
+    .from(rangeSessions)
+    .where(eq(rangeSessions.id, sessionId))
+    .all();
+  if (!session) return;
+  const [rifle] = tx
+    .select({
+      zeroDistance: rifles.zeroDistance,
+      distanceUnit: rifles.distanceUnit,
+      zeroVerifiedAt: rifles.zeroVerifiedAt,
+    })
+    .from(rifles)
+    .where(eq(rifles.id, session.rifleId))
+    .all();
+  if (!rifle) return;
+  if (!confirmsZero(entry, distanceToYd(rifle.zeroDistance, rifle.distanceUnit))) return;
+  if (rifle.zeroVerifiedAt && rifle.zeroVerifiedAt.getTime() >= session.date.getTime()) return;
+  updateRow(tx, 'rifles', session.rifleId, { zeroVerifiedAt: session.date });
+}
+
 export async function addDopeEntry(
   data: Omit<NewDopeEntry, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<DopeEntry> {
   const t = now();
   const row: NewDopeEntry = { ...data, id: newId(), createdAt: t, updatedAt: t };
-  mutate((tx) => insertRow(tx, 'dopeEntries', row));
+  mutate((tx) => {
+    insertRow(tx, 'dopeEntries', row);
+    noteZeroCheck(tx, row.sessionId, { distanceYd: row.distanceYd, confirmed: row.confirmed ?? true });
+  });
   return row as DopeEntry;
 }
 
@@ -308,6 +343,7 @@ export async function quickAddDope(params: {
       createdAt: t,
       updatedAt: t,
     });
+    noteZeroCheck(tx, sessionId, { distanceYd: params.distanceYd, confirmed: params.confirmed });
 
     return { sessionId, createdSession };
   });

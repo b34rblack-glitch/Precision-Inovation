@@ -27,6 +27,7 @@ const DEFAULTS: Partial<Record<TableName, Record<string, unknown>>> = {
     twistRight: true,
     archivedAt: null,
   },
+  landsMeasurements: { rifleId: 'rifle-1', cbtoIn: 2.2, measuredAt: new Date(T0) },
   loads: { name: '6.5CM 140 ELD-M', rifleId: null, currentVersionId: null, archivedAt: null },
   loadVersions: { loadId: 'load-1', versionNumber: 1, parentVersionId: null },
   workups: {

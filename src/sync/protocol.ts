@@ -21,7 +21,7 @@ export const TABLE_SCHEMA_VERSION = 1;
  * publishing a tag that sorts after ours is running a newer app, and merging
  * its rows could drop columns this build cannot represent.
  */
-export const MIGRATION_TAG = '0006_perpetual_vengeance';
+export const MIGRATION_TAG = '0007_rifle_chamber_lands';
 
 export const APP_MARKER = 'precision-innovation' as const;
 

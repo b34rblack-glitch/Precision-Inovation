@@ -7,8 +7,11 @@ Existing reloading apps bury you in required fields and never connect a firearm 
 to real range results. This app is built around exactly that missing loop:
 
 1. **Rifles** — profiles for each firearm: cartridge, barrel, optic, sight height,
-   turret units (MIL or MOA per rifle), distance units (yards or meters per rifle), zero.
-   Only the name is required; everything else is progressive disclosure.
+   turret units (MIL or MOA per rifle), distance units (yards or meters per rifle), zero,
+   plus the chamber (headspace, magazine length, reamer), barrel and muzzle device,
+   action and trigger, optic detail (click value snaps card holds), a round count, a
+   zero-check date, and a per-bullet distance-to-lands log that loads derive their
+   jump from. Only the name is required; everything else is progressive disclosure.
 2. **Loads** — versioned recipes (bullet, BC, powder, charge, primer, brass, CBTO/COAL).
    Editing a load that already has range history automatically creates a **new version**,
    so old results stay tied to the exact recipe that produced them. Guided workups walk
