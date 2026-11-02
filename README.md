@@ -10,9 +10,6 @@ to real range results. This app is built around exactly that missing loop:
    turret units (MIL or MOA per rifle), distance units (yards or meters per rifle), zero.
    Only the name is required; everything else is progressive disclosure.
 2. **Loads** — versioned recipes (bullet, BC, powder, charge, primer, brass, CBTO/COAL).
-   A guided **Build a Load** walkthrough takes a first-time handloader through one component
-   per screen — rifle, bullet, powder, primer, brass, case prep, sizing, seating — with a line
-   on why each matters, then suggests a name and saves the same recipe the full form would.
    Editing a load that already has range history automatically creates a **new version**,
    so old results stay tied to the exact recipe that produced them. Guided workups walk
    you through **ladder**, **OCW**, and **velocity (Satterlee)** tests: the app generates

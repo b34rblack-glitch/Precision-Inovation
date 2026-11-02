@@ -310,13 +310,7 @@ export default function RangeCardScreen() {
             message="A range card needs a load assigned to this rifle."
           />
           <Button
-            label="Build a Load for this Rifle"
-            onPress={() => router.push(`/loads/guided?rifleId=${rifleId}`)}
-            style={{ marginBottom: spacing.md }}
-          />
-          <Button
-            label="Open the Full Form"
-            variant="secondary"
+            label="New Load for this Rifle"
             onPress={() => router.push(`/loads/new?rifleId=${rifleId}`)}
           />
         </View>
