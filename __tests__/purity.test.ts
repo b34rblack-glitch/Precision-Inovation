@@ -41,6 +41,7 @@ const PURE_FILES = [
   'src/db/ids.ts',
   'src/db/schema.ts',
   'src/features/loads/recipe.ts',
+  'src/features/loads/guidedLoad.ts',
 ];
 
 /**

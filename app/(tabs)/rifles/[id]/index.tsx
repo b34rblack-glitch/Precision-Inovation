@@ -138,9 +138,17 @@ export default function RifleDetailScreen() {
 
       <Text style={[type.label, { marginBottom: spacing.sm }]}>Loads for this rifle</Text>
       {rifleLoads.length === 0 ? (
-        <Text style={[type.secondary, { marginBottom: spacing.md }]}>
-          No loads assigned to this rifle yet.
-        </Text>
+        <>
+          <Text style={[type.secondary, { marginBottom: spacing.md }]}>
+            No loads assigned to this rifle yet. Build one a component at a time, or jump
+            straight to the full form.
+          </Text>
+          <Button
+            label="Build a Load for this Rifle"
+            onPress={() => router.push(`/loads/guided?rifleId=${rifle.id}`)}
+            style={{ marginBottom: spacing.md }}
+          />
+        </>
       ) : (
         rifleLoads.map((load) => (
           <Card key={load.id} onPress={() => router.push(`/loads/${load.id}`)}>
