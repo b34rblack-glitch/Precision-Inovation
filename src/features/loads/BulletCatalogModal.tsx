@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
   Modal,
@@ -14,6 +14,8 @@ import { Chip } from '@/components/Chip';
 import {
   BULLET_MAKERS,
   BulletMaker,
+  CALIBERS,
+  caliberLabelForDiameter,
   CatalogBullet,
   searchBullets,
 } from '@/data/bulletCatalog';
@@ -23,14 +25,24 @@ type Props = {
   visible: boolean;
   onClose: () => void;
   onSelect: (bullet: CatalogBullet) => void;
+  /** Bore to filter to when the picker opens (e.g. from the rifle's cartridge). Clearable. */
+  defaultDiameterIn?: number | null;
 };
 
-export function BulletCatalogModal({ visible, onClose, onSelect }: Props) {
+export function BulletCatalogModal({ visible, onClose, onSelect, defaultDiameterIn }: Props) {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [maker, setMaker] = useState<BulletMaker | null>(null);
+  // Re-seeded from the rifle every time the picker opens; "All calibers" clears it.
+  const [diameter, setDiameter] = useState<number | null>(defaultDiameterIn ?? null);
+  useEffect(() => {
+    if (visible) setDiameter(defaultDiameterIn ?? null);
+  }, [visible, defaultDiameterIn]);
 
-  const results = useMemo(() => searchBullets(query, maker), [query, maker]);
+  const results = useMemo(
+    () => searchBullets(query, maker, diameter),
+    [query, maker, diameter],
+  );
 
   const bcLabel = (b: CatalogBullet) => {
     if (b.bcG7 != null) return `G7 ${b.bcG7.toFixed(3)}`;
@@ -79,6 +91,17 @@ export function BulletCatalogModal({ visible, onClose, onSelect }: Props) {
             <Chip key={m} label={m} selected={maker === m} onPress={() => setMaker(m)} />
           ))}
         </View>
+        <View style={[styles.makerRow, { paddingTop: 0 }]} accessibilityLabel="Caliber filter">
+          <Chip label="All calibers" selected={diameter === null} onPress={() => setDiameter(null)} />
+          {CALIBERS.map((c) => (
+            <Chip
+              key={c.label}
+              label={c.label}
+              selected={diameter !== null && Math.abs(diameter - c.diameterIn) < 0.0005}
+              onPress={() => setDiameter(c.diameterIn)}
+            />
+          ))}
+        </View>
 
         <FlatList
           data={results}
@@ -86,7 +109,20 @@ export function BulletCatalogModal({ visible, onClose, onSelect }: Props) {
           keyboardShouldPersistTaps="handled"
           contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xl }}
           ListEmptyComponent={
-            <Text style={[type.secondary, styles.empty]}>No bullets match your search.</Text>
+            <View style={styles.empty}>
+              <Text style={[type.secondary, { textAlign: 'center' }]}>
+                {diameter !== null
+                  ? `No ${caliberLabelForDiameter(diameter) ?? ''} bullets match your search.`
+                  : 'No bullets match your search.'}
+              </Text>
+              {diameter !== null ? (
+                <Chip
+                  label="Show all calibers"
+                  onPress={() => setDiameter(null)}
+                  style={{ alignSelf: 'center', marginTop: spacing.md }}
+                />
+              ) : null}
+            </View>
           }
           renderItem={({ item }) => (
             <Pressable
@@ -168,7 +204,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
-  empty: { textAlign: 'center', paddingVertical: spacing.xxl },
+  empty: { paddingVertical: spacing.xxl, paddingHorizontal: spacing.lg },
   disclaimer: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,

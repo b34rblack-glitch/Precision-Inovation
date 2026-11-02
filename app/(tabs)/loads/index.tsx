@@ -39,7 +39,11 @@ export default function LoadsScreen() {
           <EmptyState
             icon="flask"
             title="No loads yet"
-            message="Create a load recipe, then develop it with a ladder, OCW, or velocity workup."
+            message="Build your first load one component at a time — the walkthrough ends with the rounds to load and a range day. The + button opens the full form instead."
+            action={{
+              label: "Let's Build a New Load",
+              onPress: () => router.push('/loads/build'),
+            }}
           />
         ) : (
           loads.map((load) => (

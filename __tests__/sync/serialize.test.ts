@@ -119,7 +119,7 @@ describe('snapshot round trip', () => {
   });
 
   it('null-stripping meaningfully shrinks a wide load_versions row', () => {
-    // load_versions has 60 columns and a typical row fills a handful, so this
+    // load_versions has 61 columns and a typical row fills a handful, so this
     // is roughly a halving of the payload for free.
     const wide = row('loadVersions', 'v1', at(1, DEV_A), { loadId: 'l1', chargeGr: 41.6 });
 

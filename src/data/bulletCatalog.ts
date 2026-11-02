@@ -113,12 +113,39 @@ export function bestBc(b: CatalogBullet): { bcValue: number; bcModel: 'G1' | 'G7
   return null;
 }
 
-/** Case-insensitive search over maker/model/caliber/weight, optionally filtered by maker. */
-export function searchBullets(query: string, maker?: BulletMaker | null): CatalogBullet[] {
+/** Every caliber in the catalog, smallest bore first: a filter-chip row for the picker. */
+export const CALIBERS: readonly { label: string; diameterIn: number }[] = BULLET_CATALOG.reduce<
+  { label: string; diameterIn: number }[]
+>((out, b) => {
+  if (!out.some((c) => c.diameterIn === b.diameterIn)) {
+    out.push({ label: b.caliber, diameterIn: b.diameterIn });
+  }
+  return out;
+}, []).sort((a, b) => a.diameterIn - b.diameterIn);
+
+/** Two bore diameters that differ by less than half a thou are the same caliber. */
+const sameBore = (a: number, b: number): boolean => Math.abs(a - b) < 0.0005;
+
+/** Display label (".308", "6.5mm") for a bore diameter the catalog knows, else null. */
+export function caliberLabelForDiameter(diameterIn: number | null | undefined): string | null {
+  if (diameterIn == null) return null;
+  return CALIBERS.find((c) => sameBore(c.diameterIn, diameterIn))?.label ?? null;
+}
+
+/**
+ * Case-insensitive search over maker/model/caliber/weight, optionally filtered
+ * by maker and/or bullet diameter (the rifle's bore).
+ */
+export function searchBullets(
+  query: string,
+  maker?: BulletMaker | null,
+  diameterIn?: number | null,
+): CatalogBullet[] {
   const q = query.trim().toLowerCase();
   const terms = q.split(/\s+/).filter(Boolean);
   return BULLET_CATALOG.filter((b) => {
     if (maker && b.maker !== maker) return false;
+    if (diameterIn != null && !sameBore(b.diameterIn, diameterIn)) return false;
     if (terms.length === 0) return true;
     const haystack = `${b.maker} ${b.model} ${b.caliber} ${b.weightGr}gr`.toLowerCase();
     return terms.every((t) => haystack.includes(t));
