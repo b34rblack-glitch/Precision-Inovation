@@ -23,7 +23,11 @@ to real range results. This app is built around exactly that missing loop:
    batch log, so the load can be built without the phone. **My Bench** (Settings) holds
    what you own: tick catalog items or add your own, tag dies by cartridge, and every
    picker opens on your bench with the full catalog one tap away; anything saved on a
-   load joins the bench by itself. **Duplicate** copies a load to make a variant.
+   load joins the bench by itself. **Duplicate** copies a load to make a variant. A
+   **batch log** per load records each loading session (rounds, lots, runout readings
+   with average, max and a match-threshold count); batches print on the recipe sheet,
+   chart on Compare Loads, link to the range session that shot them, and count toward
+   the rifle's rounds once marked shot.
 3. **Range** — log sessions (conditions, chrono strings, target results) and record the
    holds that actually worked (**DOPE**). The **range card** is hybrid: a built-in
    point-mass ballistic solver (G1/G7) predicts every distance, and your confirmed DOPE

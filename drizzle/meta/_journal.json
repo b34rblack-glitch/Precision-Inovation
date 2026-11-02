@@ -64,6 +64,13 @@
       "when": 1793512250760,
       "tag": "0008_bench_items",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793593653449,
+      "tag": "0009_load_batches",
+      "breakpoints": true
     }
   ]
 }

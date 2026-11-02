@@ -10,6 +10,9 @@ import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { CollapsibleSection } from '@/components/Form';
 import { Screen } from '@/components/Screen';
+import { batchesForLoadQuery, deleteBatch, setBatchFired } from '@/db/repositories/batches';
+import { BatchModal } from '@/features/loads/BatchModal';
+import { batchSummary } from '@/lib/batches/model';
 import { landsForRifleQuery } from '@/db/repositories/lands';
 import { archiveLoad, duplicateLoad, loadByIdQuery, unarchiveLoad, versionsForLoadQuery } from '@/db/repositories/loads';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
@@ -48,6 +51,8 @@ export default function LoadDetailScreen() {
   const { data: archivedWorkups } = useLiveQuery(archivedWorkupsForLoadQuery(id), [id]);
   const [deleteText, setDeleteText] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const { data: batches } = useLiveQuery(batchesForLoadQuery(id), [id]);
+  const [batchOpen, setBatchOpen] = useState(false);
   const assignedRifleId = loadRows[0]?.rifleId ?? '';
   const { data: rifleRows } = useLiveQuery(rifleByIdQuery(assignedRifleId), [assignedRifleId]);
   const { data: lands } = useLiveQuery(landsForRifleQuery(assignedRifleId), [assignedRifleId]);
@@ -87,6 +92,7 @@ export default function LoadDetailScreen() {
         version: current,
         rifle: assignedRifle ?? null,
         lands,
+        batches: batches.map((b) => b.batch),
         generatedOn: new Date(),
       });
       const { uri } = await Print.printToFileAsync({ html });
@@ -269,6 +275,66 @@ export default function LoadDetailScreen() {
         </View>
       ) : null}
 
+      {current ? (
+        <Card>
+          <View style={styles.versionBadgeRow}>
+            <Text style={type.label}>Batches</Text>
+            <Pressable onPress={() => setBatchOpen(true)} hitSlop={8} accessibilityRole="button">
+              <Text style={styles.link}>Log batch</Text>
+            </Pressable>
+          </View>
+          {batches.length === 0 ? (
+            <Text style={type.secondary}>
+              No batches logged. Each time you load this recipe, log how many rounds, the lots, and the
+              runout you measured; the recipe sheet, Compare Loads and your range sessions all read it.
+            </Text>
+          ) : (
+            batches.map(({ batch: b, versionNumber }) => (
+              <View key={b.id} style={styles.batchRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={type.body}>
+                    {new Date(b.date).toLocaleDateString()} · v{versionNumber}
+                    {b.firedAt ? <Text style={type.caption}> · shot</Text> : null}
+                  </Text>
+                  <Text style={type.caption}>{batchSummary(b) || 'no details'}</Text>
+                  {[b.brassLot && `brass ${b.brassLot}`, b.powderLot && `powder ${b.powderLot}`, b.primerLot && `primer ${b.primerLot}`, b.bulletLot && `bullet ${b.bulletLot}`].some(Boolean) ? (
+                    <Text style={type.caption}>
+                      {[b.brassLot && `brass ${b.brassLot}`, b.powderLot && `powder ${b.powderLot}`, b.primerLot && `primer ${b.primerLot}`, b.bulletLot && `bullet ${b.bulletLot}`].filter(Boolean).join(' · ')}
+                    </Text>
+                  ) : null}
+                  {b.notes ? <Text style={type.caption}>{b.notes}</Text> : null}
+                </View>
+                <Pressable
+                  onPress={() => setBatchFired(b.id, !b.firedAt).catch((e) => Alert.alert('Could not update', e instanceof Error ? e.message : String(e)))}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={b.firedAt ? 'Mark batch as not shot' : 'Mark batch as shot'}
+                >
+                  <Ionicons name={b.firedAt ? 'checkmark-circle' : 'ellipse-outline'} size={22} color={b.firedAt ? colors.accent : colors.textTertiary} />
+                </Pressable>
+                <Pressable
+                  onPress={() =>
+                    Alert.alert('Delete batch?', 'Sessions that pointed at it keep their data, with the batch link cleared.', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete', style: 'destructive', onPress: () => deleteBatch(b.id).catch((e) => Alert.alert('Delete failed', e instanceof Error ? e.message : String(e))) },
+                    ])
+                  }
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete batch"
+                >
+                  <Ionicons name="trash-outline" size={20} color={colors.textTertiary} />
+                </Pressable>
+              </View>
+            ))
+          )}
+          <Text style={[type.caption, { marginTop: spacing.sm, color: colors.textTertiary }]}>
+            The circle marks a batch as shot, which adds its rounds to the rifle's round count.
+          </Text>
+        </Card>
+      ) : null}
+      {current ? <BatchModal visible={batchOpen} version={current} onClose={() => setBatchOpen(false)} /> : null}
+
       <Text style={[type.label, { marginBottom: spacing.sm }]}>Workups</Text>
       {loadWorkups.length === 0 ? (
         <Text style={[type.secondary, { marginBottom: spacing.lg }]}>
@@ -376,5 +442,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   archiveBtn: { alignItems: 'center', paddingVertical: spacing.xl },
+  batchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  link: { color: colors.accent, fontSize: 14, fontWeight: '600' },
   archivedBox: { marginVertical: spacing.xl, padding: spacing.lg, borderRadius: radii.md, borderWidth: 1, borderColor: colors.border },
 });

@@ -253,6 +253,37 @@ export const loadVersions = sqliteTable(
   (t) => [index('load_versions_load_idx').on(t.loadId)],
 );
 
+// One loading session of a recipe: the day a batch of rounds was built from
+// a load version, with the lots used and the runout readings taken. Readings
+// are stored as entered (inches) and summarised on save; a range session can
+// point at the batch it shot so groups and strings tie back to the rounds.
+export const loadBatches = sqliteTable(
+  'load_batches',
+  {
+    id: id(),
+    loadVersionId: text('load_version_id')
+      .notNull()
+      .references(() => loadVersions.id),
+    date: integer('date', { mode: 'timestamp_ms' }).notNull(),
+    quantity: integer('quantity'),
+    brassLot: text('brass_lot'),
+    powderLot: text('powder_lot'),
+    primerLot: text('primer_lot'),
+    bulletLot: text('bullet_lot'),
+    /** Individual readings, inches, as entered; null when only a summary was typed. */
+    runoutReadingsIn: text('runout_readings_in', { mode: 'json' }).$type<number[]>(),
+    runoutAvgIn: real('runout_avg_in'),
+    runoutMaxIn: real('runout_max_in'),
+    /** Readings at or under this count as match-grade; default 0.002 in. */
+    runoutThresholdIn: real('runout_threshold_in'),
+    /** Set when the batch has been shot, so its quantity joins the rifle's round count. */
+    firedAt: integer('fired_at', { mode: 'timestamp_ms' }),
+    notes: text('notes'),
+    ...timestamps,
+  },
+  (t) => [index('load_batches_version_idx').on(t.loadVersionId)],
+);
+
 export const workups = sqliteTable(
   'workups',
   {
@@ -347,6 +378,8 @@ export const rangeSessions = sqliteTable(
       .notNull()
       .references(() => rifles.id),
     loadVersionId: text('load_version_id').references(() => loadVersions.id),
+    /** The batch of rounds this session shot, when known. */
+    batchId: text('batch_id').references(() => loadBatches.id),
     date: integer('date', { mode: 'timestamp_ms' }).notNull(),
     location: text('location'),
     tempF: real('temp_f'),
@@ -506,6 +539,8 @@ export type Load = typeof loads.$inferSelect;
 export type NewLoad = typeof loads.$inferInsert;
 export type LoadVersion = typeof loadVersions.$inferSelect;
 export type NewLoadVersion = typeof loadVersions.$inferInsert;
+export type LoadBatch = typeof loadBatches.$inferSelect;
+export type NewLoadBatch = typeof loadBatches.$inferInsert;
 export type Workup = typeof workups.$inferSelect;
 export type NewWorkup = typeof workups.$inferInsert;
 export type WorkupStep = typeof workupSteps.$inferSelect;

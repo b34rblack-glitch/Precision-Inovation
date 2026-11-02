@@ -326,6 +326,7 @@
         "updatedAt": "2026-10-24T12:00:00.000Z"
       }
     ],
+    "loadBatches": [],
     "workups": [],
     "workupSteps": [],
     "rangeSessions": [
@@ -333,6 +334,7 @@
         "id": "7c1e9d3a-5b2f-4c8e-9a1d-300f1710a004",
         "rifleId": "7c1e9d3a-5b2f-4c8e-9a1d-300f1710a001",
         "loadVersionId": "7c1e9d3a-5b2f-4c8e-9a1d-300f1710a003",
+        "batchId": null,
         "date": "2026-10-04T17:00:00.000Z",
         "location": "Phoenix Rod and Gun Club",
         "tempF": 85,
@@ -352,6 +354,7 @@
         "id": "7c1e9d3a-5b2f-4c8e-9a1d-300f1720a004",
         "rifleId": "7c1e9d3a-5b2f-4c8e-9a1d-300f1720a001",
         "loadVersionId": "7c1e9d3a-5b2f-4c8e-9a1d-300f1720a003",
+        "batchId": null,
         "date": "2026-10-04T17:00:00.000Z",
         "location": "Phoenix Rod and Gun Club",
         "tempF": 85,

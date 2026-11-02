@@ -23,7 +23,9 @@ import { loadsForRifleQuery } from '@/db/repositories/loads';
 import { recentSessionsForRifleQuery } from '@/db/repositories/sessions';
 import { LandsModal, type BulletChoice } from '@/features/rifles/LandsModal';
 import { shareRifle } from '@/lib/backup';
-import { roundCount, zeroAgeDays } from '@/lib/rifle/profile';
+import { allBatchesQuery } from '@/db/repositories/batches';
+import { roundCountWithBatches } from '@/lib/batches/model';
+import { zeroAgeDays } from '@/lib/rifle/profile';
 import { colors, radii, spacing, type } from '@/theme';
 
 function SpecRow({ label, value }: { label: string; value: string | null }) {
@@ -49,21 +51,30 @@ export default function RifleDetailScreen() {
   const { data: rifleWorkups } = useLiveQuery(workupsForRifleQuery(id), [id]);
   const { data: steps } = useLiveQuery(allWorkupStepsQuery());
   const { data: strings } = useLiveQuery(allShotStringsQuery());
+  const { data: allBatches } = useLiveQuery(allBatchesQuery());
   const [sharing, setSharing] = useState(false);
   const [landsOpen, setLandsOpen] = useState(false);
   const [deleteText, setDeleteText] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const rifle = data[0];
 
-  const firedShots = useMemo(() => {
-    const sessionIds = new Set(allSessions.map((s) => s.id));
+  // Round count: every chrono string on this rifle's sessions and workups,
+  // plus every batch of its loads marked shot (strings from a session tied
+  // to such a batch are not counted twice).
+  const rounds = useMemo(() => {
+    const sessionById = new Map(allSessions.map((s) => [s.id, s]));
     const workupIds = new Set(rifleWorkups.map((w) => w.id));
     const stepIds = new Set(steps.filter((st) => workupIds.has(st.workupId)).map((st) => st.id));
-    return strings
-      .filter((str) => (str.sessionId && sessionIds.has(str.sessionId)) || (str.workupStepId && stepIds.has(str.workupStepId)))
-      .map((str) => str.shotCount);
-  }, [allSessions, rifleWorkups, steps, strings]);
-  const rounds = roundCount(rifle?.roundCountBaseline, firedShots);
+    const stringRows = strings
+      .filter((str) => (str.sessionId && sessionById.has(str.sessionId)) || (str.workupStepId && stepIds.has(str.workupStepId)))
+      .map((str) => ({ shots: str.shotCount, sessionBatchId: str.sessionId ? (sessionById.get(str.sessionId)?.batchId ?? null) : null }));
+    const loadIds = new Set(rifleLoads.map((l) => l.id));
+    const versionIds = new Set(versions.filter((v) => loadIds.has(v.loadId)).map((v) => v.id));
+    const batchRows = allBatches
+      .filter((b) => versionIds.has(b.loadVersionId))
+      .map((b) => ({ id: b.id, quantity: b.quantity, fired: b.firedAt != null }));
+    return roundCountWithBatches({ baseline: rifle?.roundCountBaseline, strings: stringRows, batches: batchRows }).total;
+  }, [allSessions, rifleWorkups, steps, strings, rifleLoads, versions, allBatches, rifle?.roundCountBaseline]);
 
   // Bullets this rifle's loads use, for the lands modal's one-tap prefills.
   const bullets = useMemo<BulletChoice[]>(() => {

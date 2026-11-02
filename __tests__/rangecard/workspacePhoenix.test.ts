@@ -113,6 +113,7 @@ describe('Phoenix workspace import file', () => {
       landsMeasurements: 5,
       loads: 2,
       loadVersions: 2,
+      loadBatches: 0,
       workups: 0,
       workupSteps: 0,
       rangeSessions: 2,

@@ -257,6 +257,7 @@ export function buildLoads(): Backup {
       landsMeasurements: [],
       loads: sets.map((s) => s.load),
       loadVersions: sets.map((s) => s.version),
+      loadBatches: [],
       workups: [],
       workupSteps: [],
       rangeSessions: [],

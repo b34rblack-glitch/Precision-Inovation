@@ -6,6 +6,7 @@
 import type {
   DopeEntry,
   Load,
+  LoadBatch,
   LoadVersion,
   RangeSession,
   ShotString,
@@ -85,6 +86,15 @@ export type LadderPoint = {
   groupIn: number | null;
 };
 
+export type RunoutSample = {
+  loadId: string;
+  batchId: string;
+  dateMs: number;
+  avgIn: number | null;
+  maxIn: number | null;
+  quantity: number | null;
+};
+
 export type CompareModel = {
   unit: TurretUnit;
   loads: CompareLoad[];
@@ -92,6 +102,7 @@ export type CompareModel = {
   groups: GroupSample[];
   dope: DopeSample[];
   ladders: LadderPoint[];
+  runout: RunoutSample[];
 };
 
 export type CompareInput = {
@@ -103,6 +114,7 @@ export type CompareInput = {
   dope: readonly DopeEntry[];
   workups: readonly Workup[];
   steps: readonly WorkupStep[];
+  batches?: readonly LoadBatch[];
 };
 
 const ms = (d: Date | number) => (d instanceof Date ? d.getTime() : Number(d));
@@ -250,13 +262,22 @@ export function buildCompareModel(input: CompareInput): CompareModel {
     });
   }
 
+  const runout: RunoutSample[] = [];
+  for (const b of input.batches ?? []) {
+    const v = versionById.get(b.loadVersionId);
+    if (!v || !loadIds.has(v.loadId)) continue;
+    if (b.runoutAvgIn == null && b.runoutMaxIn == null) continue;
+    runout.push({ loadId: v.loadId, batchId: b.id, dateMs: ms(b.date), avgIn: b.runoutAvgIn, maxIn: b.runoutMaxIn, quantity: b.quantity });
+  }
+
   const byDate = <T extends { dateMs: number }>(a: T, b: T) => a.dateMs - b.dateMs;
+  runout.sort(byDate);
   velocity.sort(byDate);
   groups.sort(byDate);
   dope.sort((a, b) => a.distanceYd - b.distanceYd || a.dateMs - b.dateMs);
   ladders.sort((a, b) => a.chargeGr - b.chargeGr);
 
-  return { unit, loads, velocity, groups, dope, ladders };
+  return { unit, loads, velocity, groups, dope, ladders, runout };
 }
 
 // --- filters ------------------------------------------------------------------
@@ -314,6 +335,7 @@ export function applyFilters(model: CompareModel, f: CompareFilters): CompareMod
     ladders: model.ladders.filter(
       (p) => shown(p.loadId) && f.sources.has('workup') && inRange(p.dateMs, f.dateRangeMs),
     ),
+    runout: model.runout.filter((r) => shown(r.loadId) && inRange(r.dateMs, f.dateRangeMs)),
   };
 }
 
@@ -328,6 +350,7 @@ export function dataExtent(model: CompareModel): {
     ...model.groups.map((g) => g.dateMs),
     ...model.dope.map((d) => d.dateMs),
     ...model.ladders.map((p) => p.dateMs),
+    ...model.runout.map((r) => r.dateMs),
   ];
   const distances = [...model.groups.map((g) => g.distanceYd), ...model.dope.map((d) => d.distanceYd)];
   const shots = model.velocity.map((s) => s.shots ?? 0);
@@ -444,6 +467,20 @@ export function groupPoints(groups: readonly GroupSample[], unit: GroupUnit): Ma
     const list = out.get(g.loadId) ?? [];
     list.push({ x: g.distanceYd, y: groupInUnit(g.groupIn, g.distanceYd, unit) });
     out.set(g.loadId, list);
+  }
+  for (const list of out.values()) list.sort((a, b) => a.x - b.x);
+  return out;
+}
+
+/** Per load, each batch's average runout (thou) by date; max when no average. */
+export function runoutTrends(samples: readonly RunoutSample[]): Map<string, XY[]> {
+  const out = new Map<string, XY[]>();
+  for (const r of samples) {
+    const y = r.avgIn ?? r.maxIn;
+    if (y == null) continue;
+    const list = out.get(r.loadId) ?? [];
+    list.push({ x: r.dateMs, y: y * 1000 });
+    out.set(r.loadId, list);
   }
   for (const list of out.values()) list.sort((a, b) => a.x - b.x);
   return out;

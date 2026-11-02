@@ -31,6 +31,7 @@ const DEFAULTS: Partial<Record<TableName, Record<string, unknown>>> = {
   landsMeasurements: { rifleId: 'rifle-1', cbtoIn: 2.2, measuredAt: new Date(T0) },
   loads: { name: '6.5CM 140 ELD-M', rifleId: null, currentVersionId: null, archivedAt: null },
   loadVersions: { loadId: 'load-1', versionNumber: 1, parentVersionId: null },
+  loadBatches: { loadVersionId: 'ver-1', date: new Date(T0), quantity: 20, runoutReadingsIn: null },
   workups: {
     rifleId: 'rifle-1',
     loadId: 'load-1',
@@ -41,7 +42,7 @@ const DEFAULTS: Partial<Record<TableName, Record<string, unknown>>> = {
     archivedAt: null,
   },
   workupSteps: { workupId: 'workup-1', seq: 1, chargeGr: 41 },
-  rangeSessions: { rifleId: 'rifle-1', loadVersionId: null, date: new Date(T0), archivedAt: null },
+  rangeSessions: { rifleId: 'rifle-1', loadVersionId: null, batchId: null, date: new Date(T0), archivedAt: null },
   shotStrings: {
     sessionId: 'session-1',
     workupStepId: null,

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type {
   DopeEntry,
   Load,
+  LoadBatch,
   LoadVersion,
   RangeSession,
   ShotString,
@@ -18,6 +19,7 @@ import {
   groupPoints,
   ladderCurves,
   MAX_SERIES,
+  runoutTrends,
   SERIES_COLORS,
   velocitySummary,
   velocityTrends,
@@ -95,7 +97,17 @@ const input: CompareInput = {
   ],
 };
 
-const model = buildCompareModel(input);
+const batch = (o: Partial<LoadBatch>): LoadBatch => ({ quantity: null, runoutAvgIn: null, runoutMaxIn: null, ...o }) as LoadBatch;
+
+const model = buildCompareModel({
+  ...input,
+  batches: [
+    batch({ id: 'b1', loadVersionId: 'vA1', date: day(4), runoutAvgIn: 0.0012, runoutMaxIn: 0.003, quantity: 40 }),
+    batch({ id: 'b2', loadVersionId: 'vA2', date: day(11), runoutAvgIn: null, runoutMaxIn: 0.002 }),
+    batch({ id: 'b3', loadVersionId: 'vB1', date: day(6) }),
+    batch({ id: 'bX', loadVersionId: 'vX', date: day(6), runoutAvgIn: 0.001 }),
+  ],
+});
 
 describe('buildCompareModel', () => {
   it('lists the rifle\'s active loads in creation order with fixed colours', () => {
@@ -162,6 +174,21 @@ describe('buildCompareModel', () => {
   });
 });
 
+describe('runout by batch', () => {
+  it('collects batches with a runout figure through the version lineage and plots avg or max in thou', () => {
+    expect(model.runout.map((r) => [r.loadId, r.batchId])).toEqual([
+      ['A', 'b1'],
+      ['A', 'b2'],
+    ]);
+    expect(runoutTrends(model.runout).get('A')).toEqual([
+      { x: day(4).getTime(), y: 1.2 },
+      { x: day(11).getTime(), y: 2 },
+    ]);
+    const clipped = applyFilters(model, { ...DEFAULT_FILTERS, dateRangeMs: [day(10).getTime(), day(12).getTime()] });
+    expect(clipped.runout.map((r) => r.batchId)).toEqual(['b2']);
+  });
+});
+
 describe('applyFilters', () => {
   it('passes everything with the defaults', () => {
     expect(applyFilters(model, DEFAULT_FILTERS)).toEqual(model);
@@ -209,7 +236,7 @@ describe('aggregates', () => {
     expect(ext.dateMs).toEqual([day(1).getTime(), day(12).getTime()]);
     expect(ext.distanceYd).toEqual([100, 500]);
     expect(ext.maxShots).toBe(10);
-    expect(dataExtent({ ...model, velocity: [], groups: [], dope: [], ladders: [] })).toEqual({
+    expect(dataExtent({ ...model, velocity: [], groups: [], dope: [], ladders: [], runout: [] })).toEqual({
       dateMs: null,
       distanceYd: null,
       maxShots: 0,

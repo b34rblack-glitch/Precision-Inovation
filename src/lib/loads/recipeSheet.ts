@@ -1,4 +1,5 @@
-import type { LandsMeasurement, Load, LoadVersion, Rifle } from '@/db/schema';
+import type { LandsMeasurement, Load, LoadBatch, LoadVersion, Rifle } from '@/db/schema';
+import { batchSummary } from '@/lib/batches/model';
 import { ingredientRows, recipeStages, type RecipeStage } from '@/features/loads/recipe';
 import { cbtoForJump, jumpFromTouch, latestLandsForBullet, sizedHeadspace } from '@/lib/rifle/profile';
 
@@ -12,6 +13,8 @@ export type RecipeSheetParams = {
   rifle: Rifle | null;
   /** The rifle's lands log; the newest reading for this bullet is used. */
   lands: readonly LandsMeasurement[];
+  /** Batches already loaded from this recipe, printed before the blank rows. */
+  batches?: readonly LoadBatch[];
   generatedOn: Date;
 };
 
@@ -161,8 +164,14 @@ export function recipeSheetHtml(p: RecipeSheetParams): string {
   <div class="log">
     <h2>Batch log</h2>
     <table>
-      <tr><th style="width:14%">Date</th><th style="width:8%">Qty</th><th>Brass lot / firings</th><th>Powder lot</th><th>Primer lot</th><th>Bullet lot</th><th style="width:24%">Notes</th></tr>
-      ${Array.from({ length: 6 }, () => '<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('\n      ')}
+      <tr><th style="width:14%">Date</th><th style="width:8%">Qty</th><th>Brass lot / firings</th><th>Powder lot</th><th>Primer lot</th><th>Bullet lot</th><th style="width:16%">Runout</th><th style="width:20%">Notes</th></tr>
+      ${(p.batches ?? [])
+        .map(
+          (b) =>
+            `<tr><td>${e(new Date(b.date).toLocaleDateString())}</td><td>${b.quantity ?? ''}</td><td>${e(b.brassLot ?? '')}</td><td>${e(b.powderLot ?? '')}</td><td>${e(b.primerLot ?? '')}</td><td>${e(b.bulletLot ?? '')}</td><td>${e(batchSummary({ ...b, quantity: null }).replace(/^runout /, ''))}</td><td>${e(b.notes ?? '')}</td></tr>`,
+        )
+        .join('\n      ')}
+      ${Array.from({ length: Math.max(2, 6 - (p.batches?.length ?? 0)) }, () => '<tr><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('\n      ')}
     </table>
   </div>
 

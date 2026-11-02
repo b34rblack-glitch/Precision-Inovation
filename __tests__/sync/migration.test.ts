@@ -69,7 +69,7 @@ describe('drizzle migrations apply to a real SQLite database', () => {
     migrate(db);
   });
 
-  it('creates all fourteen tables', () => {
+  it('creates all fifteen tables', () => {
     const names = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`)
       .all()
@@ -81,6 +81,7 @@ describe('drizzle migrations apply to a real SQLite database', () => {
         'bench_items',
         'dope_entries',
         'lands_measurements',
+        'load_batches',
         'load_versions',
         'loads',
         'range_cards',

@@ -19,6 +19,7 @@ import {
   sessionsForRifleQuery,
   workupsForRifleQuery,
 } from '@/db/repositories/compare';
+import { allBatchesQuery } from '@/db/repositories/batches';
 import { activeLoadsQuery } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import {
@@ -31,6 +32,7 @@ import {
   groupPoints,
   ladderCurves,
   MAX_SERIES,
+  runoutTrends,
   velocitySummary,
   velocityTrends,
   type CompareFilters,
@@ -59,6 +61,7 @@ export default function CompareLoadsScreen() {
   const { data: dope } = useLiveQuery(allDopeEntriesQuery());
   const { data: workups } = useLiveQuery(workupsForRifleQuery(rifleId), [rifleId]);
   const { data: steps } = useLiveQuery(allWorkupStepsQuery());
+  const { data: batches } = useLiveQuery(allBatchesQuery());
   const rifle = rifles.find((r) => r.id === rifleId);
 
   const model = useMemo(
@@ -73,9 +76,10 @@ export default function CompareLoadsScreen() {
             dope,
             workups,
             steps,
+            batches,
           })
         : null,
-    [rifle, loads, versions, sessions, strings, dope, workups, steps],
+    [rifle, loads, versions, sessions, strings, dope, workups, steps, batches],
   );
   const extent = useMemo(() => (model ? dataExtent(model) : null), [model]);
 
@@ -189,6 +193,7 @@ export default function CompareLoadsScreen() {
   const dopeSeries = toSeries(dopeCurves(shown.dope), true);
   const ladderMap = ladderCurves(shown.ladders);
   const ladderSeries = toSeries(new Map([...ladderMap].map(([k, v]) => [k, v.points])), true);
+  const runoutSeries = toSeries(runoutTrends(shown.runout), true);
   const best = bestGroups(shown.groups, groupUnit);
   const dopeCount = (loadId: string) => shown.dope.filter((d) => d.loadId === loadId).length;
 
@@ -404,6 +409,19 @@ export default function CompareLoadsScreen() {
               xFormat={(x) => `${x.toFixed(1)} gr`}
               yFormat={(y) => `${Math.round(y)}`}
               emptyText="No workup with chronograph data for the loads and filters shown."
+            />
+          </Card>
+
+          <Card>
+            <Text style={[type.heading, styles.chartTitle]}>Runout by batch</Text>
+            <Text style={[type.caption, styles.chartSub]}>
+              Average runout of each logged batch, in thousandths, by the day it was loaded.
+            </Text>
+            <XYChart
+              series={runoutSeries}
+              xFormat={shortDate}
+              yFormat={(y) => `${y.toFixed(1)}`}
+              emptyText="No batches with runout logged for the loads and filters shown."
             />
           </Card>
 

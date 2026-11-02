@@ -117,6 +117,21 @@ describe('recipeSheetHtml', () => {
     expect(html).not.toContain('<carefully>');
   });
 
+  it('prints logged batches before the blank rows', () => {
+    const withBatches = recipeSheetHtml({
+      load: { name: 'L', cartridge: null },
+      version: full,
+      rifle: null,
+      lands: [],
+      batches: [
+        { id: 'b', loadVersionId: 'v', date: new Date('2026-10-29T12:00:00Z'), quantity: 40, brassLot: 'Lot 1, 2x', powderLot: 'P8', primerLot: null, bulletLot: '<x>', runoutReadingsIn: [0.001, 0.003], runoutAvgIn: 0.002, runoutMaxIn: 0.003, runoutThresholdIn: 0.002, firedAt: null, notes: null, createdAt: new Date(), updatedAt: new Date() },
+      ],
+      generatedOn: new Date(),
+    });
+    expect(withBatches).toContain('<td>40</td><td>Lot 1, 2x</td><td>P8</td><td></td><td>&lt;x&gt;</td><td>2 avg / 3 max thou · 1/2 under 2</td>');
+    expect((withBatches.match(/<tr><td><\/td><td><\/td>/g) ?? []).length).toBe(5);
+  });
+
   it('copes with an empty recipe', () => {
     const empty = recipeSheetHtml({ load: { name: 'Blank', cartridge: null }, version: version(), rifle: null, lands: [], generatedOn: new Date() });
     expect(empty).toContain('No seating or charge targets recorded yet.');
