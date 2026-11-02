@@ -201,6 +201,7 @@ function rowsFor(spec: RifleSpec) {
     primer: null,
     brass: spec.version.brass,
     brassFirings: null,
+    roundsLoaded: null,
     cbtoIn: null,
     coalIn: null,
     crimp: null,

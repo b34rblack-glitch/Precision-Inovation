@@ -211,6 +211,8 @@ export async function promoteChargeToVersion(workupId: string, chargeGr: number)
       primer: base?.primer ?? null,
       brass: base?.brass ?? null,
       brassFirings: base?.brassFirings ?? null,
+      // A promoted charge is a new recipe — nothing has been loaded of it yet.
+      roundsLoaded: null,
       cbtoIn: base?.cbtoIn ?? null,
       coalIn: base?.coalIn ?? null,
       crimp: base?.crimp ?? null,

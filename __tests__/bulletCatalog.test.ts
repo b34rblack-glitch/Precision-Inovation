@@ -96,3 +96,26 @@ describe('searchBullets', () => {
     expect(searchBullets('zzzznotabullet')).toHaveLength(0);
   });
 });
+
+describe('caliber filter', () => {
+  it('CALIBERS lists every bore in the catalog once, smallest first', async () => {
+    const { CALIBERS, caliberLabelForDiameter } = await import('@/data/bulletCatalog');
+    const bores = [...new Set(BULLET_CATALOG.map((b) => b.diameterIn))].sort((a, b) => a - b);
+    expect(CALIBERS.map((c) => c.diameterIn)).toEqual(bores);
+    expect(caliberLabelForDiameter(0.264)).toBe('6.5mm');
+    expect(caliberLabelForDiameter(0.2641)).toBe('6.5mm');
+    expect(caliberLabelForDiameter(0.4)).toBeNull();
+    expect(caliberLabelForDiameter(null)).toBeNull();
+  });
+
+  it('searchBullets narrows to a bore and still honours maker + text', () => {
+    const only65 = searchBullets('', null, 0.264);
+    expect(only65.length).toBeGreaterThan(0);
+    expect(only65.every((b) => b.diameterIn === 0.264)).toBe(true);
+    const hornady65 = searchBullets('eld', 'Hornady', 0.264);
+    expect(hornady65.every((b) => b.maker === 'Hornady' && b.diameterIn === 0.264)).toBe(true);
+    // No bore filter is the old behaviour.
+    expect(searchBullets('', null, null)).toEqual(searchBullets(''));
+    expect(searchBullets('', null, 0.4)).toEqual([]);
+  });
+});

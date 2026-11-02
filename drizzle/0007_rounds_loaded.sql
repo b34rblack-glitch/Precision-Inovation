@@ -1,0 +1,1 @@
+ALTER TABLE `load_versions` ADD `rounds_loaded` integer;

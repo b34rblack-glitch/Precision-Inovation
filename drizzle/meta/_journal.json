@@ -50,6 +50,13 @@
       "when": 1785104026406,
       "tag": "0006_perpetual_vengeance",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793604501163,
+      "tag": "0007_rounds_loaded",
+      "breakpoints": true
     }
   ]
 }

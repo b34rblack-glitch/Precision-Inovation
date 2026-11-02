@@ -116,6 +116,14 @@ describe('drizzle migrations apply to a real SQLite database', () => {
     expect(sessionCols).toContain('target_photo_sha256');
   });
 
+  it('adds rounds_loaded to load_versions (migration 0007)', () => {
+    const cols = db
+      .prepare(`SELECT name FROM pragma_table_info('load_versions')`)
+      .all()
+      .map((r) => (r as { name: string }).name);
+    expect(cols).toContain('rounds_loaded');
+  });
+
   it('sync_row_meta is keyed by (tbl, row_id) and needs no foreign keys', () => {
     // No FK to the data tables: a tombstone exists exactly when its row does not.
     const fks = db.prepare(`SELECT * FROM pragma_foreign_key_list('sync_row_meta')`).all();

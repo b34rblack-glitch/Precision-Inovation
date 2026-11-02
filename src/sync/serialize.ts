@@ -8,7 +8,7 @@ import type { Row, Snapshot, StampedRow } from '@/sync/types';
 // a backup describe rows identically and one importer can grow to read both.
 //
 // Two differences:
-//   - null-valued keys are omitted. load_versions has 60 columns and a typical
+//   - null-valued keys are omitted. load_versions has 61 columns and a typical
 //     row fills a handful, so this roughly halves the payload for free. Decode
 //     puts every known column back as null, which matters: an upsert has to
 //     clear a field the other device cleared, not silently keep the old value.
