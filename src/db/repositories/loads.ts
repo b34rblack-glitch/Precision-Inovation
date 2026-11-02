@@ -1,7 +1,9 @@
-import { and, desc, eq, isNull, or } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, or } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { newId, now } from '@/db/ids';
 import { deleteRow, insertRow, mutate, updateRow } from '@/db/mutate';
+import { learnBenchSync } from '@/db/repositories/bench';
+import { learnedFromLoad } from '@/lib/bench/model';
 import {
   Load,
   LoadVersion,
@@ -21,6 +23,10 @@ export type LoadComponentValues = Omit<
 
 export function activeLoadsQuery() {
   return db.select().from(loads).where(isNull(loads.archivedAt)).orderBy(desc(loads.updatedAt));
+}
+
+export function archivedLoadsQuery() {
+  return db.select().from(loads).where(isNotNull(loads.archivedAt)).orderBy(desc(loads.archivedAt));
 }
 
 export function loadsForRifleQuery(rifleId: string) {
@@ -84,9 +90,52 @@ export async function createLoad(
       createdAt: t,
       updatedAt: t,
     });
+    // Whatever this load names is, by definition, on the bench.
+    learnBenchSync(tx, learnedFromLoad(components, meta.cartridge));
   });
 
   return row;
+}
+
+/**
+ * Copy a load as a new one: same rifle and cartridge, the current version's
+ * whole recipe as v1, named "<name> (copy)". The fastest way to make a
+ * seating-depth or charge variant without re-picking every component.
+ */
+export async function duplicateLoad(loadId: string): Promise<Load> {
+  const t = now();
+  return mutate((tx) => {
+    const [source] = tx.select().from(loads).where(eq(loads.id, loadId)).all();
+    if (!source) throw new Error(`Load ${loadId} not found`);
+    const current = source.currentVersionId
+      ? tx.select().from(loadVersions).where(eq(loadVersions.id, source.currentVersionId)).all()[0]
+      : undefined;
+    const newLoadId = newId();
+    const versionId = newId();
+    const row: Load = {
+      id: newLoadId,
+      name: `${source.name} (copy)`,
+      cartridge: source.cartridge,
+      rifleId: source.rifleId,
+      currentVersionId: versionId,
+      createdAt: t,
+      updatedAt: t,
+      archivedAt: null,
+    };
+    insertRow(tx, 'loads', row);
+    const { id: _id, loadId: _l, versionNumber: _n, parentVersionId: _p, createdAt: _c, updatedAt: _u, ...components } =
+      current ?? ({} as LoadVersion);
+    insertRow(tx, 'loadVersions', {
+      ...components,
+      id: versionId,
+      loadId: newLoadId,
+      versionNumber: 1,
+      parentVersionId: null,
+      createdAt: t,
+      updatedAt: t,
+    });
+    return row;
+  });
 }
 
 /** A version is locked once any session or workup references it. */
@@ -149,6 +198,7 @@ export async function updateLoad(
       cartridge: meta.cartridge,
       rifleId: meta.rifleId,
     });
+    learnBenchSync(tx, learnedFromLoad(components, meta.cartridge));
 
     const currentId = load.currentVersionId;
 
@@ -190,6 +240,10 @@ export async function updateLoad(
     updateRow(tx, 'loadVersions', currentId, components);
     return { createdNewVersion: false };
   });
+}
+
+export async function unarchiveLoad(id: string): Promise<void> {
+  mutate((tx) => updateRow(tx, 'loads', id, { archivedAt: null }));
 }
 
 export async function archiveLoad(id: string): Promise<void> {

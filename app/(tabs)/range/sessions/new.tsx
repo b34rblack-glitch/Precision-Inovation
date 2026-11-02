@@ -6,7 +6,10 @@ import { Button } from '@/components/Buttons';
 import { Chip } from '@/components/Chip';
 import { CollapsibleSection, Field, Half, NumericField, Row } from '@/components/Form';
 import { Screen } from '@/components/Screen';
+import { allBatchesQuery } from '@/db/repositories/batches';
+import { allLoadVersionsQuery } from '@/db/repositories/compare';
 import { activeLoadsQuery } from '@/db/repositories/loads';
+import { batchSummary } from '@/lib/batches/model';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { createSession } from '@/db/repositories/sessions';
 import { parseDecimal } from '@/lib/parse';
@@ -20,6 +23,9 @@ export default function NewSessionScreen() {
   const lastUsed = useLastUsed();
   const { data: rifles, updatedAt: riflesLoadedAt } = useLiveQuery(activeRiflesQuery());
   const { data: loads, updatedAt: loadsLoadedAt } = useLiveQuery(activeLoadsQuery());
+  const { data: allBatches } = useLiveQuery(allBatchesQuery());
+  const { data: allVersions } = useLiveQuery(allLoadVersionsQuery());
+  const [batchId, setBatchId] = useState<string | null>(null);
 
   const [rifleId, setRifleId] = useState<string | null>(params.rifleId ?? lastUsed.rifleId);
   const [loadId, setLoadId] = useState<string | null>(params.loadId ?? lastUsed.loadId);
@@ -51,6 +57,15 @@ export default function NewSessionScreen() {
     () => loads.filter((l) => l.rifleId === rifleId || l.rifleId === null),
     [loads, rifleId],
   );
+  // Batches of any version of the chosen load, newest first.
+  const loadBatches = useMemo(() => {
+    if (!loadId) return [];
+    const versionIds = new Set(allVersions.filter((v) => v.loadId === loadId).map((v) => v.id));
+    return allBatches.filter((b) => versionIds.has(b.loadVersionId));
+  }, [loadId, allBatches, allVersions]);
+  useEffect(() => {
+    if (batchId && !loadBatches.some((b) => b.id === batchId)) setBatchId(null);
+  }, [batchId, loadBatches]);
 
   // Drop stale selections (archived rifle/load remembered from a previous
   // session) once the live queries have actually run.
@@ -83,6 +98,7 @@ export default function NewSessionScreen() {
       const session = await createSession({
         rifleId,
         loadVersionId: load?.currentVersionId ?? null,
+        batchId: loadBatches.some((b) => b.id === batchId) ? batchId : null,
         date: new Date(),
         location: location.trim() || null,
         tempF: parseDecimal(tempF),
@@ -148,6 +164,28 @@ export default function NewSessionScreen() {
           />
         ))}
       </View>
+
+      {loadBatches.length > 0 ? (
+        <>
+          <Text style={[type.label, { marginBottom: spacing.xs, marginTop: spacing.md }]}>Batch</Text>
+          <View style={styles.chipWrap}>
+            <Chip label="Not sure" selected={batchId === null} onPress={() => setBatchId(null)} />
+            {loadBatches.map((b) => (
+              <Chip
+                key={b.id}
+                label={`${new Date(b.date).toLocaleDateString()}${b.quantity != null ? ` · ${b.quantity} rds` : ''}`}
+                selected={batchId === b.id}
+                onPress={() => setBatchId(b.id)}
+              />
+            ))}
+          </View>
+          {batchId ? (
+            <Text style={[type.caption, { marginTop: spacing.xs }]}>
+              {batchSummary(loadBatches.find((b) => b.id === batchId)!)}
+            </Text>
+          ) : null}
+        </>
+      ) : null}
 
       <View style={{ marginTop: spacing.lg }}>
         <Field label="Location" value={location} onChangeText={setLocation} placeholder="Home range" />

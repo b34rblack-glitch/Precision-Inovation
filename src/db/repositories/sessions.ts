@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { newId, now } from '@/db/ids';
 import { deleteRow, insertRow, insertRows, mutate, updateRow } from '@/db/mutate';
@@ -10,9 +10,12 @@ import {
   NewRangeSession,
   RangeSession,
   rangeSessions,
+  rifles,
   shots,
   shotStrings,
 } from '@/db/schema';
+import { confirmsZero } from '@/lib/rifle/profile';
+import { distanceToYd } from '@/lib/units';
 import { sampleSd } from '@/lib/workup/stats';
 import { autoSessionId } from '@/sync/autoSession';
 
@@ -21,6 +24,14 @@ export function activeSessionsQuery() {
     .select()
     .from(rangeSessions)
     .where(isNull(rangeSessions.archivedAt))
+    .orderBy(desc(rangeSessions.date));
+}
+
+export function archivedSessionsQuery() {
+  return db
+    .select()
+    .from(rangeSessions)
+    .where(isNotNull(rangeSessions.archivedAt))
     .orderBy(desc(rangeSessions.date));
 }
 
@@ -187,6 +198,10 @@ export async function updateSession(
   mutate((tx) => updateRow(tx, 'rangeSessions', id, data));
 }
 
+export async function unarchiveSession(id: string): Promise<void> {
+  mutate((tx) => updateRow(tx, 'rangeSessions', id, { archivedAt: null }));
+}
+
 export async function archiveSession(id: string): Promise<void> {
   mutate((tx) => {
     // Guarded like every other archiver, so re-archiving no longer moves
@@ -201,12 +216,44 @@ export async function archiveSession(id: string): Promise<void> {
   });
 }
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * A confirmed hold at the rifle's zero distance is a zero check: stamp the
+ * rifle with the session date (never moving it backwards), so the detail
+ * screen can say how old the zero is.
+ */
+function noteZeroCheck(tx: Tx, sessionId: string, entry: { distanceYd: number; confirmed: boolean }): void {
+  const [session] = tx
+    .select({ rifleId: rangeSessions.rifleId, date: rangeSessions.date })
+    .from(rangeSessions)
+    .where(eq(rangeSessions.id, sessionId))
+    .all();
+  if (!session) return;
+  const [rifle] = tx
+    .select({
+      zeroDistance: rifles.zeroDistance,
+      distanceUnit: rifles.distanceUnit,
+      zeroVerifiedAt: rifles.zeroVerifiedAt,
+    })
+    .from(rifles)
+    .where(eq(rifles.id, session.rifleId))
+    .all();
+  if (!rifle) return;
+  if (!confirmsZero(entry, distanceToYd(rifle.zeroDistance, rifle.distanceUnit))) return;
+  if (rifle.zeroVerifiedAt && rifle.zeroVerifiedAt.getTime() >= session.date.getTime()) return;
+  updateRow(tx, 'rifles', session.rifleId, { zeroVerifiedAt: session.date });
+}
+
 export async function addDopeEntry(
   data: Omit<NewDopeEntry, 'id' | 'createdAt' | 'updatedAt'>,
 ): Promise<DopeEntry> {
   const t = now();
   const row: NewDopeEntry = { ...data, id: newId(), createdAt: t, updatedAt: t };
-  mutate((tx) => insertRow(tx, 'dopeEntries', row));
+  mutate((tx) => {
+    insertRow(tx, 'dopeEntries', row);
+    noteZeroCheck(tx, row.sessionId, { distanceYd: row.distanceYd, confirmed: row.confirmed ?? true });
+  });
   return row as DopeEntry;
 }
 
@@ -308,6 +355,7 @@ export async function quickAddDope(params: {
       createdAt: t,
       updatedAt: t,
     });
+    noteZeroCheck(tx, sessionId, { distanceYd: params.distanceYd, confirmed: params.confirmed });
 
     return { sessionId, createdSession };
   });

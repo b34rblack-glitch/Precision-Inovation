@@ -6,7 +6,8 @@ import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
 import { Fab } from '@/components/Buttons';
 import { Screen } from '@/components/Screen';
-import { activeRiflesQuery } from '@/db/repositories/rifles';
+import { ArchivedSection } from '@/components/ArchivedSection';
+import { activeRiflesQuery, archivedRiflesQuery, unarchiveRifle } from '@/db/repositories/rifles';
 import { colors, radii, spacing, type } from '@/theme';
 
 export default function RiflesScreen() {
@@ -14,6 +15,7 @@ export default function RiflesScreen() {
   // updatedAt is undefined until the live query's first emission — gate the
   // empty state on it so it doesn't flash before data arrives.
   const { data: rifles, updatedAt } = useLiveQuery(activeRiflesQuery());
+  const { data: archived } = useLiveQuery(archivedRiflesQuery());
   const loading = updatedAt === undefined;
 
   return (
@@ -32,7 +34,7 @@ export default function RiflesScreen() {
           </Pressable>
         }
       >
-        {loading ? null : rifles.length === 0 ? (
+        {loading ? null : rifles.length === 0 && archived.length === 0 ? (
           <EmptyState
             icon="locate"
             title="No rifles yet"
@@ -64,6 +66,14 @@ export default function RiflesScreen() {
               </View>
             </Card>
           ))
+        )}
+        {loading ? null : (
+          <ArchivedSection
+            noun="rifle"
+            rows={archived.map((r) => ({ id: r.id, title: r.name, subtitle: r.cartridge, archivedAt: r.archivedAt }))}
+            onOpen={(id) => router.push(`/rifles/${id}`)}
+            onUnarchive={unarchiveRifle}
+          />
         )}
       </Screen>
       <Fab onPress={() => router.push('/rifles/new')} accessibilityLabel="Add rifle" />

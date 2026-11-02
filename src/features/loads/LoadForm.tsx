@@ -1,16 +1,22 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useNavigation } from 'expo-router';
 import { usePreventRemove } from 'expo-router/react-navigation';
-import { useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { createContext, useContext, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { Alert, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Chip } from '@/components/Chip';
 import { CollapsibleSection, Field, Half, NumericField, Row, Segmented } from '@/components/Form';
+import { Screen } from '@/components/Screen';
+import { addBenchItem, benchItemsQuery } from '@/db/repositories/bench';
+import { landsForRifleQuery } from '@/db/repositories/lands';
 import { LoadComponentValues } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { Load, LoadVersion } from '@/db/schema';
-import { ListPickerModal } from '@/components/ListPickerModal';
-import { bestBc, CatalogBullet } from '@/data/bulletCatalog';
+import { ListPickerModal, type PickerBench } from '@/components/ListPickerModal';
+import type { BenchKind } from '@/db/schema';
+import { CARTRIDGE_KINDS } from '@/lib/bench/model';
+
 import {
   BRASS_OPTIONS,
   POWDER_OPTIONS,
@@ -19,8 +25,24 @@ import {
   SEATING_DIE_OPTIONS,
   SIZING_DIE_OPTIONS,
 } from '@/data/componentCatalog';
+import {
+  FORM_GROUP_BY_KEY,
+  groupHasData,
+  isGroupVisible,
+  stageHasVisibleGroups,
+  type FormGroupKey,
+  type FormPrefs,
+} from '@/features/loads/formGroups';
+import { crumb } from '@/lib/crashLog';
 import { parseDecimal } from '@/lib/parse';
-import { BulletCatalogModal } from '@/features/loads/BulletCatalogModal';
+import {
+  cbtoForJump,
+  exceedsMagazine,
+  jumpFromTouch,
+  latestLandsForBullet,
+  sizedHeadspace,
+} from '@/lib/rifle/profile';
+import { BulletCatalogModal, type PickedBullet } from '@/features/loads/BulletCatalogModal';
 import {
   filledStageKeys,
   fromYesNo,
@@ -33,6 +55,7 @@ import {
   YES_NO,
   YesNo,
 } from '@/features/loads/recipe';
+import { useFormPrefs } from '@/stores/formPrefsStore';
 import { colors, spacing, type } from '@/theme';
 
 export type LoadFormResult = {
@@ -90,9 +113,18 @@ type Props = {
   /** Preselects a rifle when creating a new load (ignored when editing). */
   defaultRifleId?: string | null;
   submitLabel: string;
-  onSubmit: (result: LoadFormResult) => void | Promise<void>;
+  /**
+   * Persists the load. A rejection is shown as "Save failed" and leaves the
+   * form (and its unsaved-changes guard) exactly as it was. The returned
+   * function, if any, is what leaves the screen: the form runs it on the next
+   * tick, after it has dropped its guard and let the save's re-render settle.
+   */
+  onSubmit: (result: LoadFormResult) => void | AfterSave | Promise<void | AfterSave>;
 };
 
+export type AfterSave = () => void;
+
+/** Renders its own Screen so the save button can live in the pinned footer. */
 export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLabel, onSubmit }: Props) {
   const navigation = useNavigation();
   const { data: rifles } = useLiveQuery(activeRiflesQuery());
@@ -101,6 +133,31 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
   const [name, setName] = useState(initialLoad?.name ?? '');
   const [cartridge, setCartridge] = useState(initialLoad?.cartridge ?? '');
   const [rifleId, setRifleId] = useState<string | null>(initialRifleId);
+  // The chosen rifle's chamber facts drive the checks below (headspace,
+  // magazine length) and its lands log supplies this bullet's touch reading.
+  const rifle = rifles.find((r) => r.id === rifleId) ?? null;
+  const { data: lands } = useLiveQuery(landsForRifleQuery(rifleId ?? ''), [rifleId]);
+  // The bench: pickers open on what is there and sort this cartridge's dies first.
+  const { data: bench } = useLiveQuery(benchItemsQuery());
+  const pickerCartridge = cartridge.trim() || rifle?.cartridge || null;
+  const benchFor = (kind: BenchKind): PickerBench => ({
+    kind,
+    items: bench,
+    cartridge: pickerCartridge,
+    onAddCustom: async (name) => {
+      await addBenchItem({
+        kind,
+        name,
+        cartridge: CARTRIDGE_KINDS.has(kind) ? pickerCartridge : null,
+        bulletMake: null,
+        bulletModel: null,
+        bulletWeightGr: null,
+        bulletDiameterIn: null,
+        bcValue: null,
+        bcModel: null,
+      });
+    },
+  });
 
   const [bulletMake, setBulletMake] = useState(initialVersion?.bulletMake ?? '');
   const [bulletModel, setBulletModel] = useState(initialVersion?.bulletModel ?? '');
@@ -193,8 +250,28 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
   );
   const [assemblyNotes, setAssemblyNotes] = useState(initialVersion?.assemblyNotes ?? '');
 
+  // Which optional groups this loader shows. A group with data always shows.
+  const formPrefs = useFormPrefs();
+  const prefs = useMemo<FormPrefs>(
+    () => ({ mode: formPrefs.mode, notUsed: new Set(formPrefs.notUsed) }),
+    [formPrefs.mode, formPrefs.notUsed],
+  );
+  // G reads these through context so its component type stays stable across
+  // renders (a component defined inside render would remount its inputs on
+  // every keystroke and drop the keyboard).
+  const groupCtx = useMemo<GroupContextValue>(
+    () => ({ prefs, version: initialVersion, setNotUsed: formPrefs.setNotUsed }),
+    [prefs, initialVersion, formPrefs.setNotUsed],
+  );
+  const stageShown = (stage: Parameters<typeof stageHasVisibleGroups>[0], always = false) =>
+    stageHasVisibleGroups(stage, prefs, initialVersion, always);
+
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
+  // Once a save has gone through the guard stays down for good: the screen is
+  // on its way out, and the live query that refreshes `initialVersion` may land
+  // after the navigation, so `dirty` cannot be trusted to settle in time.
+  const [saved, setSaved] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [powderPickerOpen, setPowderPickerOpen] = useState(false);
   const [primerPickerOpen, setPrimerPickerOpen] = useState(false);
@@ -271,8 +348,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
     assemblyNotes !== (initialVersion?.assemblyNotes ?? '');
 
   // While submitting the guard is down so the post-save navigation goes through;
-  // a failed save re-arms it (submitting resets to false).
-  usePreventRemove(dirty && !submitting, ({ data }) => {
+  // a failed save re-arms it (submitting resets to false, saved stays false).
+  usePreventRemove(dirty && !submitting && !saved, ({ data }) => {
     Alert.alert('Discard changes?', 'You have unsaved edits on this load.', [
       { text: 'Keep Editing', style: 'cancel' },
       { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
@@ -284,16 +361,15 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
 
   // Catalog pick prefills the bullet's make/model/weight and its best BC
   // (G7 preferred). Every field stays editable afterward.
-  const applyCatalogBullet = (bullet: CatalogBullet) => {
+  const applyCatalogBullet = (bullet: PickedBullet) => {
     setBulletMake(bullet.maker);
     setBulletModel(bullet.model);
-    setBulletWeight(bullet.weightGr.toString());
+    setBulletWeight(bullet.weightGr != null ? bullet.weightGr.toString() : '');
     // The catalog knows diameter but not length — length stays hand-entered.
-    setBulletDiameter(bullet.diameterIn.toString());
-    const bc = bestBc(bullet);
-    if (bc) {
-      setBcValue(bc.bcValue.toString());
-      setBcModel(bc.bcModel);
+    if (bullet.diameterIn != null) setBulletDiameter(bullet.diameterIn.toString());
+    if (bullet.bcValue != null) {
+      setBcValue(bullet.bcValue.toString());
+      if (bullet.bcModel) setBcModel(bullet.bcModel);
     }
     setErrors((e) => ({ ...e, bulletWeight: undefined, bcValue: undefined, bulletDiameter: undefined }));
   };
@@ -381,9 +457,11 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       return;
     }
     setErrors({});
+    Keyboard.dismiss();
+    crumb(`load form: save tapped (${initialLoad ? 'edit ' + initialLoad.id : 'new'})`);
     setSubmitting(true);
     try {
-      await onSubmit({
+      const after = await onSubmit({
         meta: { name: name.trim(), cartridge: str(cartridge), rifleId },
         components: {
           bulletMake: str(bulletMake),
@@ -442,15 +520,37 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           assemblyNotes: str(assemblyNotes),
         },
       });
+      crumb('load form: saved');
+      setSaved(true);
+      if (after) {
+        setTimeout(() => {
+          crumb('load form: leaving screen');
+          after();
+        }, 0);
+      }
+    } catch (e) {
+      crumb(`load form: save failed: ${e instanceof Error ? e.message : String(e)}`);
+      Alert.alert('Save failed', e instanceof Error ? e.message : String(e));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <View>
+    <Screen underHeader footer={<Button label={submitLabel} onPress={submit} loading={submitting} />}>
+      <GroupContext.Provider value={groupCtx}>
       <Text style={[type.secondary, styles.formHint]}>
         Only Name is required — fill in as much or as little of the rest as you track.
+      </Text>
+      <Segmented
+        label="Fields"
+        options={['Simple', 'Full'] as const}
+        value={formPrefs.mode === 'simple' ? 'Simple' : 'Full'}
+        onChange={(v) => formPrefs.setMode(v === 'Simple' ? 'simple' : 'full')}
+      />
+      <Text style={[type.caption, { marginTop: -spacing.sm, marginBottom: spacing.lg, color: colors.textTertiary }]}>
+        Simple shows what most loaders track. Tap “Not used” on any group to hide it for good;
+        anything with data always shows. Change it later under Settings → Load form fields.
       </Text>
       <Field
         label="Name *"
@@ -574,6 +674,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         <Button label="Choose Brass" variant="secondary" onPress={() => setBrassPickerOpen(true)} />
       </CollapsibleSection>
 
+      {stageShown('bulletDetail') ? (
+      <G id="bulletDetail">
       <CollapsibleSection title="Bullet ballistics detail" initiallyOpen={bulletDetailFilled}>
         <Text style={[type.secondary, styles.sectionHint]}>
           Length + diameter enable the spin-drift estimate on range cards.
@@ -636,12 +738,16 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           </Text>
         ) : null}
       </CollapsibleSection>
+      </G>
+      ) : null}
 
+      {stageShown('casePrep') ? (
       <CollapsibleSection title={STAGE_TITLES.casePrep} initiallyOpen={filledStages.has('casePrep')}>
+        <G id="caseLot">
+          <Field label="Case lot #" value={caseLot} onChangeText={setCaseLot} placeholder="Lot 4823" />
+        </G>
+        <G id="caseSorting">
         <Row>
-          <Half>
-            <Field label="Case lot #" value={caseLot} onChangeText={setCaseLot} placeholder="Lot 4823" />
-          </Half>
           <Half>
             <NumericField
               label="Case weight"
@@ -654,8 +760,6 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
               error={errors.caseWeight}
             />
           </Half>
-        </Row>
-        <Row>
           <Half>
             <NumericField
               label="Case volume"
@@ -668,6 +772,10 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
               error={errors.caseVolume}
             />
           </Half>
+        </Row>
+        </G>
+        <G id="trimming">
+        <Row>
           <Half>
             <NumericField
               label="Trim length"
@@ -681,14 +789,18 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
               error={errors.caseTrimLength}
             />
           </Half>
+          <Half>
+            <Field
+              label="Trimmed with"
+              value={caseTrimmedTo}
+              onChangeText={setCaseTrimmedTo}
+              placeholder="Giraud"
+              autoCapitalize="words"
+            />
+          </Half>
         </Row>
-        <Field
-          label="Trimmed with"
-          value={caseTrimmedTo}
-          onChangeText={setCaseTrimmedTo}
-          placeholder="Giraud"
-          autoCapitalize="words"
-        />
+        </G>
+        <G id="neckTurning">
         <Row>
           <Half>
             <Segmented label="Neck turned" options={YES_NO} value={neckTurned} onChange={setNeckTurned} />
@@ -707,6 +819,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
+        </G>
+        <G id="pocketPrep">
         <Row>
           <Half>
             <Segmented
@@ -725,6 +839,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
+        </G>
+        <G id="annealing">
         <Row>
           <Half>
             <Segmented label="Annealed" options={YES_NO} value={annealed} onChange={setAnnealed} />
@@ -738,6 +854,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
+        </G>
+        <G id="casePrepNotes">
         <Field
           label="Prep notes"
           value={casePrepNotes}
@@ -745,9 +863,13 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           multiline
           placeholder="Chamfer, deburr, pocket uniforming…"
         />
+        </G>
       </CollapsibleSection>
+      ) : null}
 
+      {stageShown('sizing') ? (
       <CollapsibleSection title={STAGE_TITLES.sizing} initiallyOpen={filledStages.has('sizing')}>
+        <G id="sizingDie">
         <Field
           label="Sizing die"
           value={sizingDie}
@@ -767,6 +889,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           value={sizingDieType}
           onChange={setSizingDieType}
         />
+        </G>
+        <G id="bushingMandrel">
         <Row>
           <Half>
             <NumericField
@@ -795,6 +919,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
+        </G>
+        <G id="shoulderBump">
         <NumericField
           label="Shoulder bump"
           value={shoulderBump}
@@ -806,12 +932,27 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           placeholder="0.002"
           error={errors.shoulderBump}
         />
+        {rifle?.headspaceIn != null ? (
+          <Text style={[type.secondary, styles.sectionHint]}>
+            {(() => {
+              const bump = parseDecimal(shoulderBump);
+              const insert = rifle.headspaceInsert ? ` (${rifle.headspaceInsert})` : '';
+              return bump != null && bump >= 0
+                ? `Fired cases read ${rifle.headspaceIn}"${insert}; a ${bump}" bump sizes to ${sizedHeadspace(rifle.headspaceIn, bump)}".`
+                : `Fired cases read ${rifle.headspaceIn}"${insert} in this rifle. Enter the bump to see the sized reading.`;
+            })()}
+          </Text>
+        ) : null}
+        </G>
+        <G id="lube">
         <Field
           label="Lube"
           value={lubeMethod}
           onChangeText={setLubeMethod}
           placeholder="Imperial wax, graphite necks"
         />
+        </G>
+        <G id="press">
         <Field
           label="Press"
           value={pressName}
@@ -819,64 +960,78 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           placeholder="Forster Co-Ax"
           autoCapitalize="words"
         />
-        <Button label="Choose Press" variant="secondary" onPress={() => setPressPickerOpen(true)} />
+        <Button label="Choose Press" variant="secondary" onPress={() => setPressPickerOpen(true)} style={{ marginBottom: spacing.lg }} />
+        </G>
       </CollapsibleSection>
+      ) : null}
 
+      {stageShown('priming') ? (
       <CollapsibleSection title={STAGE_TITLES.priming} initiallyOpen={filledStages.has('priming')}>
         <Text style={[type.secondary, styles.sectionHint]}>
           The primer itself is in Ingredients — this is the lot and how deep it seated.
         </Text>
-        <Row>
-          <Half>
-            <Field label="Primer lot #" value={primerLot} onChangeText={setPrimerLot} placeholder="Lot 91-2" />
-          </Half>
-          <Half>
-            <NumericField
-              label="Below flush"
-              value={primerSeatingDepth}
-              onChangeText={(v) => {
-                setPrimerSeatingDepth(v);
-                clearError('primerSeatingDepth');
-              }}
-              suffix="in"
-              placeholder="0.003"
-              error={errors.primerSeatingDepth}
-            />
-          </Half>
-        </Row>
+        <G id="primerLot">
+          <Field label="Primer lot #" value={primerLot} onChangeText={setPrimerLot} placeholder="Lot 91-2" />
+        </G>
+        <G id="primerSeating">
+          <NumericField
+            label="Seated below flush"
+            value={primerSeatingDepth}
+            onChangeText={(v) => {
+              setPrimerSeatingDepth(v);
+              clearError('primerSeatingDepth');
+            }}
+            suffix="in"
+            placeholder="0.003"
+            error={errors.primerSeatingDepth}
+          />
+        </G>
       </CollapsibleSection>
+      ) : null}
 
       <CollapsibleSection title={STAGE_TITLES.charging} initiallyOpen={filledStages.has('charging')}>
         <Text style={[type.secondary, styles.sectionHint]}>
-          Powder and charge weight are in Ingredients — this is how the charge was thrown.
+          The powder is picked in Ingredients; the charge weight is the same number in both places.
         </Text>
-        <Field
-          label="Charge method"
-          value={chargeMethod}
-          onChangeText={setChargeMethod}
-          placeholder="Autotrickler V4"
+        <NumericField
+          label="Charge weight"
+          value={chargeGr}
+          onChangeText={(v) => {
+            setChargeGr(v);
+            clearError('chargeGr');
+          }}
+          suffix="gr"
+          placeholder="76.5"
+          error={errors.chargeGr}
         />
-        <Row>
-          <Half>
-            <Field label="Powder lot #" value={powderLot} onChangeText={setPowderLot} placeholder="Lot 8021" />
-          </Half>
-          <Half>
-            <NumericField
-              label="Tolerance (±)"
-              value={chargeVariance}
-              onChangeText={(v) => {
-                setChargeVariance(v);
-                clearError('chargeVariance');
-              }}
-              suffix="gr"
-              placeholder="0.02"
-              error={errors.chargeVariance}
-            />
-          </Half>
-        </Row>
+        <G id="chargeMethod">
+          <Field
+            label="Charge method"
+            value={chargeMethod}
+            onChangeText={setChargeMethod}
+            placeholder="Autotrickler V4"
+          />
+        </G>
+        <G id="powderLot">
+          <Field label="Powder lot #" value={powderLot} onChangeText={setPowderLot} placeholder="Lot 8021" />
+        </G>
+        <G id="chargeTolerance">
+          <NumericField
+            label="Tolerance (±)"
+            value={chargeVariance}
+            onChangeText={(v) => {
+              setChargeVariance(v);
+              clearError('chargeVariance');
+            }}
+            suffix="gr"
+            placeholder="0.02"
+            error={errors.chargeVariance}
+          />
+        </G>
       </CollapsibleSection>
 
       <CollapsibleSection title={STAGE_TITLES.seating} initiallyOpen={filledStages.has('seating')}>
+        <G id="seatingDie">
         <Field
           label="Seating die"
           value={seatingDie}
@@ -896,6 +1051,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           onChangeText={setSeatingMicrometer}
           placeholder="4.5 on the dial"
         />
+        </G>
         <Row>
           <Half>
             <NumericField
@@ -922,38 +1078,98 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
-        <Row>
-          <Half>
-            <NumericField
-              label="Jump to lands"
-              value={jumpToLands}
-              onChangeText={(v) => {
-                setJumpToLands(v);
-                clearError('jumpToLands');
-              }}
-              suffix="in"
-              signed
-              placeholder="0.020"
-              error={errors.jumpToLands}
-            />
-          </Half>
-          <Half>
-            <NumericField
-              label="Neck tension"
-              value={neckTension}
-              onChangeText={(v) => {
-                setNeckTension(v);
-                clearError('neckTension');
-              }}
-              suffix="in"
-              placeholder="0.002"
-              error={errors.neckTension}
-            />
-          </Half>
-        </Row>
-        <Text style={[type.secondary, styles.sectionHint]}>
-          Jump is measured off the lands — enter a negative value if the bullet is jammed in.
-        </Text>
+        {rifle && exceedsMagazine(parseDecimal(coal), rifle.magazineMaxCoalIn) ? (
+          <Text style={[type.secondary, styles.warn]}>
+            Longer than the magazine: {rifle.name} feeds up to {rifle.magazineMaxCoalIn}" COAL.
+          </Text>
+        ) : null}
+        {(() => {
+          if (!rifle) return null;
+          const touch = latestLandsForBullet(lands, {
+            make: bulletMake,
+            model: bulletModel,
+            weightGr: parseDecimal(bulletWeight),
+          });
+          if (!touch) {
+            return bulletMake.trim() || bulletModel.trim() ? (
+              <Text style={[type.secondary, styles.sectionHint]}>
+                No distance-to-lands reading for this bullet in {rifle.name}. Log one on the rifle's
+                screen and the jump fills itself here.
+              </Text>
+            ) : null;
+          }
+          const seated = parseDecimal(cbto);
+          const jump = parseDecimal(jumpToLands);
+          const when = new Date(touch.measuredAt).toLocaleDateString();
+          const derivedJump = seated != null ? jumpFromTouch(touch.cbtoIn, seated) : null;
+          const derivedCbto = jump != null ? cbtoForJump(touch.cbtoIn, jump) : null;
+          return (
+            <View style={{ marginBottom: spacing.lg }}>
+              <Text style={[type.secondary, { color: colors.textTertiary }]}>
+                Touches the lands at {touch.cbtoIn.toFixed(3)}" CBTO in {rifle.name} ({when}
+                {touch.roundCount != null ? `, ${touch.roundCount} rds` : ''}).
+                {derivedJump != null
+                  ? ` Seated at ${seated}" that is ${derivedJump < 0 ? `${Math.abs(derivedJump)}" jam` : `${derivedJump}" jump`}.`
+                  : ''}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm }}>
+                {derivedJump != null && String(derivedJump) !== jumpToLands.trim() ? (
+                  <Button
+                    label={`Set jump ${derivedJump}"`}
+                    variant="secondary"
+                    onPress={() => {
+                      setJumpToLands(String(derivedJump));
+                      clearError('jumpToLands');
+                    }}
+                    style={{ flex: 1 }}
+                  />
+                ) : null}
+                {derivedCbto != null && String(derivedCbto) !== cbto.trim() ? (
+                  <Button
+                    label={`Set CBTO ${derivedCbto}"`}
+                    variant="secondary"
+                    onPress={() => {
+                      setCbto(String(derivedCbto));
+                      clearError('cbto');
+                    }}
+                    style={{ flex: 1 }}
+                  />
+                ) : null}
+              </View>
+            </View>
+          );
+        })()}
+        <G id="jump">
+          <NumericField
+            label="Jump to lands"
+            value={jumpToLands}
+            onChangeText={(v) => {
+              setJumpToLands(v);
+              clearError('jumpToLands');
+            }}
+            suffix="in"
+            signed
+            placeholder="0.020"
+            error={errors.jumpToLands}
+          />
+          <Text style={[type.secondary, styles.sectionHint]}>
+            Jump is measured off the lands — enter a negative value if the bullet is jammed in.
+          </Text>
+        </G>
+        <G id="neckTension">
+          <NumericField
+            label="Neck tension"
+            value={neckTension}
+            onChangeText={(v) => {
+              setNeckTension(v);
+              clearError('neckTension');
+            }}
+            suffix="in"
+            placeholder="0.002"
+            error={errors.neckTension}
+          />
+        </G>
+        <G id="bulletLot">
         <Row>
           <Half>
             <Field label="Bullet lot #" value={bulletLot} onChangeText={setBulletLot} placeholder="Lot 3390" />
@@ -967,6 +1183,8 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
+        </G>
+        <G id="crimp">
         <Row>
           <Half>
             <Field label="Crimp" value={crimp} onChangeText={setCrimp} placeholder="None" />
@@ -981,36 +1199,35 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
+        </G>
       </CollapsibleSection>
 
       <CollapsibleSection title={STAGE_TITLES.qc} initiallyOpen={filledStages.has('qc')}>
-        <Row>
-          <Half>
-            <NumericField
-              label="Runout (TIR)"
-              value={runout}
-              onChangeText={(v) => {
-                setRunout(v);
-                clearError('runout');
-              }}
-              suffix="in"
-              placeholder="0.001"
-              error={errors.runout}
-            />
-          </Half>
-          <Half>
-            <NumericField
-              label="Loaded weight"
-              value={loadedWeight}
-              onChangeText={(v) => {
-                setLoadedWeight(v);
-                clearError('loadedWeight');
-              }}
-              suffix="gr"
-              error={errors.loadedWeight}
-            />
-          </Half>
-        </Row>
+        <G id="runout">
+          <NumericField
+            label="Runout (TIR)"
+            value={runout}
+            onChangeText={(v) => {
+              setRunout(v);
+              clearError('runout');
+            }}
+            suffix="in"
+            placeholder="0.001"
+            error={errors.runout}
+          />
+        </G>
+        <G id="loadedWeight">
+          <NumericField
+            label="Loaded weight"
+            value={loadedWeight}
+            onChangeText={(v) => {
+              setLoadedWeight(v);
+              clearError('loadedWeight');
+            }}
+            suffix="gr"
+            error={errors.loadedWeight}
+          />
+        </G>
         <NumericField
           label="Muzzle velocity (avg)"
           value={mv}
@@ -1021,6 +1238,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           suffix="fps"
           error={errors.mv}
         />
+        <G id="mvDetail">
         <Row>
           <Half>
             <NumericField
@@ -1053,6 +1271,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         <Text style={[type.secondary, styles.sectionHint]}>
           Range cards shift MV by sensitivity × (session temp − measured-at temp).
         </Text>
+        </G>
         <Field
           label="Assembly notes"
           value={assemblyNotes}
@@ -1068,16 +1287,16 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
         old results stay tied to the exact recipe that produced them.
       </Text>
 
-      <Button label={submitLabel} onPress={submit} loading={submitting} />
-
       <BulletCatalogModal
         visible={catalogOpen}
+        benchItems={bench}
         onClose={() => setCatalogOpen(false)}
         onSelect={applyCatalogBullet}
       />
       <ListPickerModal
         visible={powderPickerOpen}
         title="Powders"
+        bench={benchFor('powder')}
         options={POWDER_OPTIONS}
         placeholder="Search h4350, varget, RL16…"
         footer="Product names only — enter your own worked-up charge weight. Always start from published load data and watch for pressure."
@@ -1087,6 +1306,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       <ListPickerModal
         visible={primerPickerOpen}
         title="Primers"
+        bench={benchFor('primer')}
         options={PRIMER_OPTIONS}
         placeholder="Search CCI, 210M, magnum…"
         onClose={() => setPrimerPickerOpen(false)}
@@ -1095,6 +1315,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       <ListPickerModal
         visible={brassPickerOpen}
         title="Brass"
+        bench={benchFor('brass')}
         options={BRASS_OPTIONS}
         placeholder="Search Lapua, Peterson…"
         onClose={() => setBrassPickerOpen(false)}
@@ -1103,6 +1324,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       <ListPickerModal
         visible={sizingDiePickerOpen}
         title="Sizing Dies"
+        bench={benchFor('sizingDie')}
         options={SIZING_DIE_OPTIONS}
         placeholder="Search Redding, bushing, body…"
         onClose={() => setSizingDiePickerOpen(false)}
@@ -1111,6 +1333,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       <ListPickerModal
         visible={seatingDiePickerOpen}
         title="Seating Dies"
+        bench={benchFor('seatingDie')}
         options={SEATING_DIE_OPTIONS}
         placeholder="Search Wilson, micrometer, arbor…"
         onClose={() => setSeatingDiePickerOpen(false)}
@@ -1119,17 +1342,73 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       <ListPickerModal
         visible={pressPickerOpen}
         title="Presses"
+        bench={benchFor('press')}
         options={PRESS_OPTIONS}
         placeholder="Search Co-Ax, arbor, turret…"
         onClose={() => setPressPickerOpen(false)}
         onSelect={setPressName}
       />
-    </View>
+      </GroupContext.Provider>
+    </Screen>
   );
 }
 
+type GroupContextValue = {
+  prefs: FormPrefs;
+  version: LoadVersion | undefined;
+  setNotUsed: (key: FormGroupKey, notUsed: boolean) => void;
+};
+const GroupContext = createContext<GroupContextValue>({
+  prefs: { mode: 'full', notUsed: new Set() },
+  version: undefined,
+  setNotUsed: () => {},
+});
+
+/**
+ * One optional field group. Shown with a "Not used" link when it has no data;
+ * marked not used, it collapses to a one-line "Show" row in Full mode and
+ * disappears in Simple mode. A group with data on this load always shows.
+ */
+function G({ id, children }: { id: FormGroupKey; children: ReactNode }) {
+  const { prefs, version, setNotUsed } = useContext(GroupContext);
+  const title = FORM_GROUP_BY_KEY[id].title;
+  if (isGroupVisible(id, prefs, version)) {
+    return (
+      <View>
+        {!groupHasData(id, version) ? (
+          <View style={styles.groupHead}>
+            <Text style={[type.caption, { color: colors.textTertiary }]}>{title}</Text>
+            <Pressable onPress={() => setNotUsed(id, true)} hitSlop={8} accessibilityRole="button" accessibilityLabel={`${title}: not used`}>
+              <Text style={styles.groupLink}>Not used</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {children}
+      </View>
+    );
+  }
+  if (prefs.mode === 'full' && prefs.notUsed.has(id)) {
+    return (
+      <Pressable
+        onPress={() => setNotUsed(id, false)}
+        style={styles.groupHidden}
+        accessibilityRole="button"
+        accessibilityLabel={`${title}: not used. Show`}
+      >
+        <Text style={[type.caption, { color: colors.textTertiary, flex: 1 }]}>{title} · not used</Text>
+        <Text style={styles.groupLink}>Show</Text>
+      </Pressable>
+    );
+  }
+  return null;
+}
+
 const styles = StyleSheet.create({
+  groupHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 },
+  groupHidden: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm, marginBottom: spacing.sm },
+  groupLink: { color: colors.accent, fontSize: 12, fontWeight: '600' },
   chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   formHint: { marginBottom: spacing.lg, color: colors.textTertiary },
   sectionHint: { marginBottom: spacing.md, color: colors.textTertiary },
+  warn: { marginBottom: spacing.md, color: colors.danger },
 });

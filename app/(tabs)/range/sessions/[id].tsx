@@ -7,7 +7,9 @@ import { Button } from '@/components/Buttons';
 import { Field, Half, NumericField, Row, Segmented } from '@/components/Form';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
+import { allBatchesQuery } from '@/db/repositories/batches';
 import { getVersionById } from '@/db/repositories/loads';
+import { batchSummary } from '@/lib/batches/model';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
 import {
   addDopeEntry,
@@ -73,6 +75,11 @@ export default function SessionDetailScreen() {
 
   // --- which load this session was shot with ---
   const [loadLabel, setLoadLabel] = useState<string | null>(null);
+  const { data: batchRows } = useLiveQuery(allBatchesQuery());
+  const sessionBatch = session?.batchId ? batchRows.find((b) => b.id === session.batchId) : undefined;
+  const batchLabel = sessionBatch
+    ? `${new Date(sessionBatch.date).toLocaleDateString()} · ${batchSummary(sessionBatch) || 'no details'}`
+    : null;
   const [sessionLoadId, setSessionLoadId] = useState<string | null>(null);
   const loadVersionId = session?.loadVersionId ?? null;
   useEffect(() => {
@@ -225,6 +232,9 @@ export default function SessionDetailScreen() {
 
       <Card>
         <Text style={type.heading}>{rifle?.name ?? 'Rifle'}</Text>
+        {batchLabel ? (
+          <Text style={[type.caption, { marginTop: 2 }]}>Batch: {batchLabel}</Text>
+        ) : null}
         {loadLabel ? (
           <Text style={[type.secondary, { marginTop: 2, color: colors.accent }]}>{loadLabel}</Text>
         ) : null}
