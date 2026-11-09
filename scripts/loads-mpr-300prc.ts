@@ -265,6 +265,7 @@ export function buildLoads(): Backup {
       shots: [],
       dopeEntries: [],
       rangeCards: [],
+      targetPhotos: [],
     },
   };
 }

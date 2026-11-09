@@ -69,7 +69,7 @@ describe('drizzle migrations apply to a real SQLite database', () => {
     migrate(db);
   });
 
-  it('creates all fifteen tables', () => {
+  it('creates all sixteen tables', () => {
     const names = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`)
       .all()
@@ -91,6 +91,7 @@ describe('drizzle migrations apply to a real SQLite database', () => {
         'shots',
         'sync_row_meta',
         'sync_state',
+        'target_photos',
         'workup_steps',
         'workups',
       ].sort(),
@@ -117,6 +118,26 @@ describe('drizzle migrations apply to a real SQLite database', () => {
       .all()
       .map((r) => (r as { name: string }).name);
     expect(sessionCols).toContain('target_photo_sha256');
+  });
+
+  it('target_photos can belong to a workup, one of its steps, or a session', () => {
+    const fks = db
+      .prepare(`SELECT "table" AS parent, "from" AS col FROM pragma_foreign_key_list('target_photos')`)
+      .all() as { parent: string; col: string }[];
+    expect(fks.map((f) => `${f.col} -> ${f.parent}`).sort()).toEqual([
+      'session_id -> range_sessions',
+      'workup_id -> workups',
+      'workup_step_id -> workup_steps',
+    ]);
+
+    // Every owner column is nullable: a photo with no owner is the merge
+    // engine's problem to drop, not a constraint violation at insert time.
+    const cols = db.prepare(`SELECT name, "notnull" AS nn FROM pragma_table_info('target_photos')`).all() as {
+      name: string;
+      nn: number;
+    }[];
+    const notNull = cols.filter((c) => c.nn === 1).map((c) => c.name).sort();
+    expect(notNull).toEqual(['created_at', 'file_name', 'id', 'updated_at']);
   });
 
   it('sync_row_meta is keyed by (tbl, row_id) and needs no foreign keys', () => {

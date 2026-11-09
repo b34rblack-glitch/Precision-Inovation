@@ -74,6 +74,15 @@ function fixture(): BackupTables {
       { id: 'card-a-x', rifleId: 'rifle-a', loadVersionId: 'ver-x', preset: 'bench', archivedAt: null, ...base },
       { id: 'card-b', rifleId: 'rifle-b', loadVersionId: 'ver-b1', preset: 'bench', archivedAt: null, ...base },
     ],
+    targetPhotos: [
+      // Whole-target and per-charge photos on rifle A's own workup.
+      { id: 'photo-a-target', workupId: 'wk-a', workupStepId: null, sessionId: null, fileName: 'photo-a-target.jpg', sha256: 'abc', caption: 'Tall target', ...base },
+      { id: 'photo-a-step', workupId: 'wk-a', workupStepId: 'step-a', sessionId: null, fileName: 'photo-a-step.jpg', sha256: null, caption: null, ...base },
+      // On the cross-rifle workup, which a rifle-A-only share drops.
+      { id: 'photo-cross', workupId: 'wk-cross', workupStepId: 'step-cross', sessionId: null, fileName: 'photo-cross.jpg', sha256: null, caption: null, ...base },
+      // Owned by a session on rifle B.
+      { id: 'photo-sess-b', workupId: null, workupStepId: null, sessionId: 'sess-b', fileName: 'photo-sess-b.jpg', sha256: null, caption: null, ...base },
+    ],
   };
   return tables;
 }
@@ -110,6 +119,7 @@ describe('selectSubset', () => {
     expect(ids(sub.shots)).toEqual(['shot-1', 'shot-2']);
     expect(ids(sub.dopeEntries)).toEqual(['dope-a']);
     expect(ids(sub.rangeCards)).toEqual(['card-a']); // card-a-x points at an excluded version
+    expect(ids(sub.targetPhotos)).toEqual(['photo-a-step', 'photo-a-target']);
     expectIntegrity(sub);
   });
 
@@ -209,6 +219,15 @@ describe('stripDeviceLocal', () => {
     expect(out.rifles[0]!.photoUri).toBeNull();
     expect(out.rifles[1]).toBe(tables.rifles[1]); // nothing to strip: same object
     expect(out.loads[0]).toBe(tables.loads[0]);
+  });
+
+  it('leaves target photo rows out entirely — without the bytes they are broken thumbnails', () => {
+    const tables = fixture();
+    expect(tables.targetPhotos.length).toBeGreaterThan(0);
+    expect(stripDeviceLocal(tables).targetPhotos).toEqual([]);
+    // remapIds strips too, so a shared or added file never carries them.
+    const sub = selectSubset(tables, { rifleIds: ['rifle-a'], includeUnattachedLoads: false });
+    expect(remapIds(sub, () => 'x').targetPhotos).toEqual([]);
   });
 });
 

@@ -30,6 +30,7 @@ const FK_PARENTS: Record<string, string[]> = {
   shots: ['shotStrings'],
   dopeEntries: ['rangeSessions'],
   rangeCards: ['rifles', 'loadVersions'],
+  targetPhotos: ['workups', 'workupSteps', 'rangeSessions'],
 };
 
 describe('TABLE_ORDER', () => {
