@@ -13,6 +13,11 @@ to real range results. This app is built around exactly that missing loop:
    zero-check date, and a per-bullet distance-to-lands log that loads derive their
    jump from. Only the name is required; everything else is progressive disclosure.
 2. **Loads** — versioned recipes (bullet, BC, powder, charge, primer, brass, CBTO/COAL).
+   New to handloading? **Build a Load** walks you through it like a production line — pick
+   batch or charge ladder, then rifle, bullet, powder, primer, brass, sizing, charge, seating —
+   one screen each with a line on why it matters, and ends with the rounds to load and a
+   range day. It never suggests a charge: you enter yours and confirm it came from published
+   data, every time.
    Editing a load that already has range history automatically creates a **new version**,
    so old results stay tied to the exact recipe that produced them. Guided workups walk
    you through **ladder**, **OCW**, and **velocity (Satterlee)** tests: the app generates

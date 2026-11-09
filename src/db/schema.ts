@@ -192,6 +192,7 @@ export const loadVersions = sqliteTable(
     primer: text('primer'),
     brass: text('brass'),
     brassFirings: integer('brass_firings'),
+    // Rounds assembled with this exact recipe (a batch size); null = not recorded.
     cbtoIn: real('cbto_in'),
     coalIn: real('coal_in'),
     crimp: text('crimp'),
@@ -504,7 +505,7 @@ export const rangeCards = sqliteTable(
 //   - tombstones must outlive their rows, which a column on the row cannot do
 //     without soft-deleting — and soft deletes would break the range_cards
 //     unique index and every isNull(archivedAt) query in the app;
-//   - load_versions is already 60 columns wide and close to SQLite's
+//   - load_versions is already 61 columns wide and close to SQLite's
 //     bind-variable ceiling during restore (see src/lib/tables.ts);
 //   - the backup payload shape stays byte-identical, so existing exports keep
 //     restoring into a sync-aware build.

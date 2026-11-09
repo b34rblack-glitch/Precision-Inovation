@@ -11,6 +11,7 @@ import { Screen } from '@/components/Screen';
 import { addBenchItem, benchItemsQuery } from '@/db/repositories/bench';
 import { landsForRifleQuery } from '@/db/repositories/lands';
 import { LoadComponentValues } from '@/db/repositories/loads';
+import { LoadFormPrefill, prefillAsVersion } from '@/features/loads/buildLoad';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { Load, LoadVersion } from '@/db/schema';
 import { ListPickerModal, type PickerBench } from '@/components/ListPickerModal';
@@ -68,6 +69,7 @@ const str = (s: string): string | null => (s.trim() === '' ? null : s.trim());
 type Errors = Partial<
   Record<
     | 'name'
+    | 'rifle'
     | 'bulletWeight'
     | 'bcValue'
     | 'bulletLength'
@@ -112,6 +114,14 @@ type Props = {
   initialVersion?: LoadVersion;
   /** Preselects a rifle when creating a new load (ignored when editing). */
   defaultRifleId?: string | null;
+  /** Values the Build-a-Load walkthrough collected. Seeds the fields; still counts as unsaved. */
+  prefill?: LoadFormPrefill;
+  /** Hide "Unassigned" and refuse to save without a rifle. */
+  rifleRequired?: boolean;
+  /** Ask before leaving with unsaved edits (default). The walkthrough runs its own guard. */
+  guardUnsaved?: boolean;
+  /** Rendered above the form, inside its Screen — e.g. the step-by-step link. */
+  header?: ReactNode;
   submitLabel: string;
   /**
    * Persists the load. A rejection is shown as "Save failed" and leaves the
@@ -125,13 +135,28 @@ type Props = {
 export type AfterSave = () => void;
 
 /** Renders its own Screen so the save button can live in the pinned footer. */
-export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLabel, onSubmit }: Props) {
+export function LoadForm({
+  initialLoad,
+  initialVersion,
+  defaultRifleId,
+  prefill,
+  rifleRequired,
+  guardUnsaved = true,
+  header,
+  submitLabel,
+  onSubmit,
+}: Props) {
   const navigation = useNavigation();
   const { data: rifles } = useLiveQuery(activeRiflesQuery());
+  // A prefill seeds the fields but not the dirty baseline below, so a prefilled
+  // form counts as unsaved until it is actually saved.
+  const seedVersion = initialVersion ?? prefillAsVersion(prefill);
 
-  const initialRifleId = initialLoad ? (initialLoad.rifleId ?? null) : (defaultRifleId ?? null);
-  const [name, setName] = useState(initialLoad?.name ?? '');
-  const [cartridge, setCartridge] = useState(initialLoad?.cartridge ?? '');
+  const initialRifleId = initialLoad
+    ? (initialLoad.rifleId ?? null)
+    : (prefill?.rifleId ?? defaultRifleId ?? null);
+  const [name, setName] = useState(initialLoad?.name ?? prefill?.name ?? '');
+  const [cartridge, setCartridge] = useState(initialLoad?.cartridge ?? prefill?.cartridge ?? '');
   const [rifleId, setRifleId] = useState<string | null>(initialRifleId);
   // The chosen rifle's chamber facts drive the checks below (headspace,
   // magazine length) and its lands log supplies this bullet's touch reading.
@@ -159,96 +184,96 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
     },
   });
 
-  const [bulletMake, setBulletMake] = useState(initialVersion?.bulletMake ?? '');
-  const [bulletModel, setBulletModel] = useState(initialVersion?.bulletModel ?? '');
-  const [bulletWeight, setBulletWeight] = useState(initialVersion?.bulletWeightGr?.toString() ?? '');
-  const [bcValue, setBcValue] = useState(initialVersion?.bcValue?.toString() ?? '');
-  const [bcModel, setBcModel] = useState<'G1' | 'G7'>(initialVersion?.bcModel ?? 'G7');
-  const [bulletLength, setBulletLength] = useState(initialVersion?.bulletLengthIn?.toString() ?? '');
+  const [bulletMake, setBulletMake] = useState(seedVersion?.bulletMake ?? '');
+  const [bulletModel, setBulletModel] = useState(seedVersion?.bulletModel ?? '');
+  const [bulletWeight, setBulletWeight] = useState(seedVersion?.bulletWeightGr?.toString() ?? '');
+  const [bcValue, setBcValue] = useState(seedVersion?.bcValue?.toString() ?? '');
+  const [bcModel, setBcModel] = useState<'G1' | 'G7'>(seedVersion?.bcModel ?? 'G7');
+  const [bulletLength, setBulletLength] = useState(seedVersion?.bulletLengthIn?.toString() ?? '');
   const [bulletDiameter, setBulletDiameter] = useState(
-    initialVersion?.bulletDiameterIn?.toString() ?? '',
+    seedVersion?.bulletDiameterIn?.toString() ?? '',
   );
   const [bcSegs, setBcSegs] = useState<{ vel: string; bc: string }[]>(() =>
-    bcSegsFromVersion(initialVersion),
+    bcSegsFromVersion(seedVersion),
   );
-  const [powderName, setPowderName] = useState(initialVersion?.powderName ?? '');
-  const [chargeGr, setChargeGr] = useState(initialVersion?.chargeGr?.toString() ?? '');
-  const [primer, setPrimer] = useState(initialVersion?.primer ?? '');
-  const [brass, setBrass] = useState(initialVersion?.brass ?? '');
-  const [brassFirings, setBrassFirings] = useState(initialVersion?.brassFirings?.toString() ?? '');
-  const [cbto, setCbto] = useState(initialVersion?.cbtoIn?.toString() ?? '');
-  const [coal, setCoal] = useState(initialVersion?.coalIn?.toString() ?? '');
-  const [crimp, setCrimp] = useState(initialVersion?.crimp ?? '');
-  const [mv, setMv] = useState(initialVersion?.muzzleVelocityFps?.toString() ?? '');
-  const [mvTempRef, setMvTempRef] = useState(initialVersion?.mvTempRefF?.toString() ?? '');
+  const [powderName, setPowderName] = useState(seedVersion?.powderName ?? '');
+  const [chargeGr, setChargeGr] = useState(seedVersion?.chargeGr?.toString() ?? '');
+  const [primer, setPrimer] = useState(seedVersion?.primer ?? '');
+  const [brass, setBrass] = useState(seedVersion?.brass ?? '');
+  const [brassFirings, setBrassFirings] = useState(seedVersion?.brassFirings?.toString() ?? '');
+  const [cbto, setCbto] = useState(seedVersion?.cbtoIn?.toString() ?? '');
+  const [coal, setCoal] = useState(seedVersion?.coalIn?.toString() ?? '');
+  const [crimp, setCrimp] = useState(seedVersion?.crimp ?? '');
+  const [mv, setMv] = useState(seedVersion?.muzzleVelocityFps?.toString() ?? '');
+  const [mvTempRef, setMvTempRef] = useState(seedVersion?.mvTempRefF?.toString() ?? '');
   const [mvTempSens, setMvTempSens] = useState(
-    initialVersion?.mvTempSensFpsPerDegF?.toString() ?? '',
+    seedVersion?.mvTempSensFpsPerDegF?.toString() ?? '',
   );
-  const [notes, setNotes] = useState(initialVersion?.notes ?? '');
+  const [notes, setNotes] = useState(seedVersion?.notes ?? '');
 
   // 1 · Case prep
-  const [caseLot, setCaseLot] = useState(initialVersion?.caseLotNumber ?? '');
-  const [caseWeight, setCaseWeight] = useState(initialVersion?.caseWeightGr?.toString() ?? '');
-  const [caseVolume, setCaseVolume] = useState(initialVersion?.caseVolumeGrH2O?.toString() ?? '');
+  const [caseLot, setCaseLot] = useState(seedVersion?.caseLotNumber ?? '');
+  const [caseWeight, setCaseWeight] = useState(seedVersion?.caseWeightGr?.toString() ?? '');
+  const [caseVolume, setCaseVolume] = useState(seedVersion?.caseVolumeGrH2O?.toString() ?? '');
   const [caseTrimLength, setCaseTrimLength] = useState(
-    initialVersion?.caseTrimLengthIn?.toString() ?? '',
+    seedVersion?.caseTrimLengthIn?.toString() ?? '',
   );
-  const [caseTrimmedTo, setCaseTrimmedTo] = useState(initialVersion?.caseTrimmedTo ?? '');
-  const [neckTurned, setNeckTurned] = useState<YesNo>(toYesNo(initialVersion?.caseNeckTurned));
-  const [neckWall, setNeckWall] = useState(initialVersion?.neckWallThicknessIn?.toString() ?? '');
+  const [caseTrimmedTo, setCaseTrimmedTo] = useState(seedVersion?.caseTrimmedTo ?? '');
+  const [neckTurned, setNeckTurned] = useState<YesNo>(toYesNo(seedVersion?.caseNeckTurned));
+  const [neckWall, setNeckWall] = useState(seedVersion?.neckWallThicknessIn?.toString() ?? '');
   const [pocketUniformed, setPocketUniformed] = useState<YesNo>(
-    toYesNo(initialVersion?.primerPocketUniformed),
+    toYesNo(seedVersion?.primerPocketUniformed),
   );
   const [flashHoleDeburred, setFlashHoleDeburred] = useState<YesNo>(
-    toYesNo(initialVersion?.flashHoleDeburred),
+    toYesNo(seedVersion?.flashHoleDeburred),
   );
-  const [annealed, setAnnealed] = useState<YesNo>(toYesNo(initialVersion?.caseAnnealed));
-  const [annealMethod, setAnnealMethod] = useState(initialVersion?.annealMethod ?? '');
-  const [casePrepNotes, setCasePrepNotes] = useState(initialVersion?.casePrepNotes ?? '');
+  const [annealed, setAnnealed] = useState<YesNo>(toYesNo(seedVersion?.caseAnnealed));
+  const [annealMethod, setAnnealMethod] = useState(seedVersion?.annealMethod ?? '');
+  const [casePrepNotes, setCasePrepNotes] = useState(seedVersion?.casePrepNotes ?? '');
 
   // 2 · Sizing & dies
-  const [sizingDie, setSizingDie] = useState(initialVersion?.sizingDie ?? '');
+  const [sizingDie, setSizingDie] = useState(seedVersion?.sizingDie ?? '');
   const [sizingDieType, setSizingDieType] = useState<SizingDieTypeChoice>(
-    sizingDieTypeToChoice(initialVersion?.sizingDieType),
+    sizingDieTypeToChoice(seedVersion?.sizingDieType),
   );
-  const [bushingSize, setBushingSize] = useState(initialVersion?.bushingSizeIn?.toString() ?? '');
+  const [bushingSize, setBushingSize] = useState(seedVersion?.bushingSizeIn?.toString() ?? '');
   const [expanderMandrel, setExpanderMandrel] = useState(
-    initialVersion?.expanderMandrelIn?.toString() ?? '',
+    seedVersion?.expanderMandrelIn?.toString() ?? '',
   );
-  const [shoulderBump, setShoulderBump] = useState(initialVersion?.shoulderBumpIn?.toString() ?? '');
-  const [lubeMethod, setLubeMethod] = useState(initialVersion?.lubeMethod ?? '');
-  const [pressName, setPressName] = useState(initialVersion?.pressName ?? '');
+  const [shoulderBump, setShoulderBump] = useState(seedVersion?.shoulderBumpIn?.toString() ?? '');
+  const [lubeMethod, setLubeMethod] = useState(seedVersion?.lubeMethod ?? '');
+  const [pressName, setPressName] = useState(seedVersion?.pressName ?? '');
 
   // 3 · Priming
-  const [primerLot, setPrimerLot] = useState(initialVersion?.primerLotNumber ?? '');
+  const [primerLot, setPrimerLot] = useState(seedVersion?.primerLotNumber ?? '');
   const [primerSeatingDepth, setPrimerSeatingDepth] = useState(
-    initialVersion?.primerSeatingDepthIn?.toString() ?? '',
+    seedVersion?.primerSeatingDepthIn?.toString() ?? '',
   );
 
   // 4 · Charging
-  const [powderLot, setPowderLot] = useState(initialVersion?.powderLotNumber ?? '');
-  const [chargeMethod, setChargeMethod] = useState(initialVersion?.chargeMethod ?? '');
+  const [powderLot, setPowderLot] = useState(seedVersion?.powderLotNumber ?? '');
+  const [chargeMethod, setChargeMethod] = useState(seedVersion?.chargeMethod ?? '');
   const [chargeVariance, setChargeVariance] = useState(
-    initialVersion?.chargeVarianceGr?.toString() ?? '',
+    seedVersion?.chargeVarianceGr?.toString() ?? '',
   );
 
   // 5 · Seating
-  const [seatingDie, setSeatingDie] = useState(initialVersion?.seatingDie ?? '');
+  const [seatingDie, setSeatingDie] = useState(seedVersion?.seatingDie ?? '');
   const [seatingMicrometer, setSeatingMicrometer] = useState(
-    initialVersion?.seatingDieMicrometer ?? '',
+    seedVersion?.seatingDieMicrometer ?? '',
   );
-  const [jumpToLands, setJumpToLands] = useState(initialVersion?.jumpToLandsIn?.toString() ?? '');
-  const [neckTension, setNeckTension] = useState(initialVersion?.neckTensionIn?.toString() ?? '');
-  const [crimpDie, setCrimpDie] = useState(initialVersion?.crimpDie ?? '');
-  const [bulletLot, setBulletLot] = useState(initialVersion?.bulletLotNumber ?? '');
-  const [bulletSortedBy, setBulletSortedBy] = useState(initialVersion?.bulletSortedBy ?? '');
+  const [jumpToLands, setJumpToLands] = useState(seedVersion?.jumpToLandsIn?.toString() ?? '');
+  const [neckTension, setNeckTension] = useState(seedVersion?.neckTensionIn?.toString() ?? '');
+  const [crimpDie, setCrimpDie] = useState(seedVersion?.crimpDie ?? '');
+  const [bulletLot, setBulletLot] = useState(seedVersion?.bulletLotNumber ?? '');
+  const [bulletSortedBy, setBulletSortedBy] = useState(seedVersion?.bulletSortedBy ?? '');
 
   // 6 · QC & results
-  const [runout, setRunout] = useState(initialVersion?.runoutIn?.toString() ?? '');
+  const [runout, setRunout] = useState(seedVersion?.runoutIn?.toString() ?? '');
   const [loadedWeight, setLoadedWeight] = useState(
-    initialVersion?.loadedRoundWeightGr?.toString() ?? '',
+    seedVersion?.loadedRoundWeightGr?.toString() ?? '',
   );
-  const [assemblyNotes, setAssemblyNotes] = useState(initialVersion?.assemblyNotes ?? '');
+  const [assemblyNotes, setAssemblyNotes] = useState(seedVersion?.assemblyNotes ?? '');
 
   // Which optional groups this loader shows. A group with data always shows.
   const formPrefs = useFormPrefs();
@@ -282,11 +307,11 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
 
   // A stage that already holds data opens on mount, so editing an existing
   // recipe never hides what was recorded behind a collapsed header.
-  const [filledStages] = useState(() => filledStageKeys(initialVersion));
+  const [filledStages] = useState(() => filledStageKeys(seedVersion));
   const bulletDetailFilled =
-    initialVersion?.bulletLengthIn != null ||
-    initialVersion?.bulletDiameterIn != null ||
-    (initialVersion?.bcSegments?.length ?? 0) > 0;
+    seedVersion?.bulletLengthIn != null ||
+    seedVersion?.bulletDiameterIn != null ||
+    (seedVersion?.bcSegments?.length ?? 0) > 0;
 
   const dirty =
     name !== (initialLoad?.name ?? '') ||
@@ -349,7 +374,9 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
 
   // While submitting the guard is down so the post-save navigation goes through;
   // a failed save re-arms it (submitting resets to false, saved stays false).
-  usePreventRemove(dirty && !submitting && !saved, ({ data }) => {
+  // The walkthrough passes guardUnsaved=false: it runs its own leave prompt,
+  // and two stacked alerts on one Back press is worse than none.
+  usePreventRemove(guardUnsaved && dirty && !submitting && !saved, ({ data }) => {
     Alert.alert('Discard changes?', 'You have unsaved edits on this load.', [
       { text: 'Keep Editing', style: 'cancel' },
       { text: 'Discard', style: 'destructive', onPress: () => navigation.dispatch(data.action) },
@@ -401,6 +428,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
       return n;
     };
     if (name.trim() === '') errs.name = 'Name is required — everything else is optional.';
+    if (rifleRequired && rifleId === null) errs.rifle = 'Pick the rifle this load is for.';
     const bulletWeightGr = num(bulletWeight, 'bulletWeight');
     const bc = num(bcValue, 'bcValue');
     if (bc !== null && bc <= 0 && !errs.bcValue) errs.bcValue = 'BC must be greater than 0.';
@@ -539,6 +567,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
   return (
     <Screen underHeader footer={<Button label={submitLabel} onPress={submit} loading={submitting} />}>
       <GroupContext.Provider value={groupCtx}>
+      {header}
       <Text style={[type.secondary, styles.formHint]}>
         Only Name is required — fill in as much or as little of the rest as you track.
       </Text>
@@ -560,7 +589,7 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           clearError('name');
         }}
         placeholder={'e.g. "140 ELD-M / H4350 41.5"'}
-        autoFocus={!initialLoad}
+        autoFocus={!initialLoad && !prefill}
         error={errors.name}
       />
       <Field label="Cartridge" value={cartridge} onChangeText={setCartridge} placeholder="6.5 Creedmoor" />
@@ -571,12 +600,25 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
           <Text style={type.secondary}>No rifles yet — this load can stay unassigned.</Text>
         ) : (
           <View style={styles.chipWrap}>
-            <Chip label="Unassigned" selected={rifleId === null} onPress={() => setRifleId(null)} />
+            {rifleRequired ? null : (
+              <Chip label="Unassigned" selected={rifleId === null} onPress={() => setRifleId(null)} />
+            )}
             {rifles.map((r) => (
-              <Chip key={r.id} label={r.name} selected={rifleId === r.id} onPress={() => setRifleId(r.id)} />
+              <Chip
+                key={r.id}
+                label={r.name}
+                selected={rifleId === r.id}
+                onPress={() => {
+                  setRifleId(r.id);
+                  clearError('rifle');
+                }}
+              />
             ))}
           </View>
         )}
+        {errors.rifle ? (
+          <Text style={{ color: colors.danger, marginTop: spacing.sm }}>{errors.rifle}</Text>
+        ) : null}
       </View>
 
       <CollapsibleSection title="Ingredients" initiallyOpen>
@@ -671,7 +713,12 @@ export function LoadForm({ initialLoad, initialVersion, defaultRifleId, submitLa
             />
           </Half>
         </Row>
-        <Button label="Choose Brass" variant="secondary" onPress={() => setBrassPickerOpen(true)} />
+        <Button
+          label="Choose Brass"
+          variant="secondary"
+          onPress={() => setBrassPickerOpen(true)}
+          style={{ marginBottom: spacing.lg }}
+        />
       </CollapsibleSection>
 
       {stageShown('bulletDetail') ? (
