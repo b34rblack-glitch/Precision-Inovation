@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 import { Card } from '@/components/Card';
 import { EmptyState } from '@/components/EmptyState';
-import { Fab } from '@/components/Buttons';
+import { Button, Fab } from '@/components/Buttons';
 import { Screen } from '@/components/Screen';
 import { activeLoadsQuery } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
@@ -36,11 +36,20 @@ export default function LoadsScreen() {
         }
       >
         {loading ? null : loads.length === 0 ? (
-          <EmptyState
-            icon="flask"
-            title="No loads yet"
-            message="Create a load recipe, then develop it with a ladder, OCW, or velocity workup."
-          />
+          <>
+            <EmptyState
+              icon="flask"
+              title="No loads yet"
+              message="Create a load recipe, then develop it with a ladder, OCW, or velocity workup."
+            />
+            <Button label="Guided Setup" onPress={() => router.push('/loads/wizard')} />
+            <Button
+              label="Blank Form"
+              variant="secondary"
+              onPress={() => router.push('/loads/new')}
+              style={{ marginTop: spacing.sm }}
+            />
+          </>
         ) : (
           loads.map((load) => (
             <Card key={load.id} onPress={() => router.push(`/loads/${load.id}`)}>
@@ -58,7 +67,7 @@ export default function LoadsScreen() {
           ))
         )}
       </Screen>
-      <Fab onPress={() => router.push('/loads/new')} accessibilityLabel="Add load" />
+      <Fab onPress={() => router.push('/loads/wizard')} accessibilityLabel="Add load" />
     </>
   );
 }
