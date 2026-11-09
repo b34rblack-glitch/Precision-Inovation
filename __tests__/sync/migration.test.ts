@@ -69,7 +69,7 @@ describe('drizzle migrations apply to a real SQLite database', () => {
     migrate(db);
   });
 
-  it('creates all twelve tables', () => {
+  it('creates all sixteen tables', () => {
     const names = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`)
       .all()
@@ -78,7 +78,10 @@ describe('drizzle migrations apply to a real SQLite database', () => {
 
     expect(names).toEqual(
       [
+        'bench_items',
         'dope_entries',
+        'lands_measurements',
+        'load_batches',
         'load_versions',
         'loads',
         'range_cards',
@@ -88,6 +91,7 @@ describe('drizzle migrations apply to a real SQLite database', () => {
         'shots',
         'sync_row_meta',
         'sync_state',
+        'target_photos',
         'workup_steps',
         'workups',
       ].sort(),
@@ -116,12 +120,24 @@ describe('drizzle migrations apply to a real SQLite database', () => {
     expect(sessionCols).toContain('target_photo_sha256');
   });
 
-  it('adds rounds_loaded to load_versions (migration 0007)', () => {
-    const cols = db
-      .prepare(`SELECT name FROM pragma_table_info('load_versions')`)
-      .all()
-      .map((r) => (r as { name: string }).name);
-    expect(cols).toContain('rounds_loaded');
+  it('target_photos can belong to a workup, one of its steps, or a session', () => {
+    const fks = db
+      .prepare(`SELECT "table" AS parent, "from" AS col FROM pragma_foreign_key_list('target_photos')`)
+      .all() as { parent: string; col: string }[];
+    expect(fks.map((f) => `${f.col} -> ${f.parent}`).sort()).toEqual([
+      'session_id -> range_sessions',
+      'workup_id -> workups',
+      'workup_step_id -> workup_steps',
+    ]);
+
+    // Every owner column is nullable: a photo with no owner is the merge
+    // engine's problem to drop, not a constraint violation at insert time.
+    const cols = db.prepare(`SELECT name, "notnull" AS nn FROM pragma_table_info('target_photos')`).all() as {
+      name: string;
+      nn: number;
+    }[];
+    const notNull = cols.filter((c) => c.nn === 1).map((c) => c.name).sort();
+    expect(notNull).toEqual(['created_at', 'file_name', 'id', 'updated_at']);
   });
 
   it('sync_row_meta is keyed by (tbl, row_id) and needs no foreign keys', () => {

@@ -177,12 +177,3 @@ describe('yes/no mapping', () => {
     expect(fromYesNo(toYesNo(false))).toBe(false);
   });
 });
-
-describe('rounds loaded (batch size)', () => {
-  it('shows on the ingredients card only when recorded', () => {
-    expect(valueOf(ingredientRows(version({ roundsLoaded: 20 })), 'Rounds loaded')).toBe('20');
-    expect(ingredientRows(version({ roundsLoaded: null })).map((r) => r.label)).not.toContain(
-      'Rounds loaded',
-    );
-  });
-});

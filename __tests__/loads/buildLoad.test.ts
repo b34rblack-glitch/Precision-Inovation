@@ -245,7 +245,6 @@ describe('draftToPrefill', () => {
       caseNeckTurned: false,
       sizingDieType: 'full-length',
       jumpToLandsIn: -0.01,
-      roundsLoaded: 20,
     });
     // Never asked by the walkthrough — left for the form's defaults.
     expect(p.version).not.toHaveProperty('muzzleVelocityFps');
@@ -254,9 +253,11 @@ describe('draftToPrefill', () => {
     expect(p.version).not.toHaveProperty('chargeAcknowledged');
   });
 
-  it('a ladder carries no batch size', () => {
-    const p = draftToPrefill(draftWith({ stringType: 'ladder', roundsLoaded: '20' }));
-    expect(p.version).not.toHaveProperty('roundsLoaded');
+  it('no string type carries the batch size onto the recipe — it opens a batch-log row', () => {
+    for (const stringType of ['ladder', 'batch'] as const) {
+      const p = draftToPrefill(draftWith({ stringType, roundsLoaded: '20' }));
+      expect(p.version).not.toHaveProperty('roundsLoaded');
+    }
   });
 
   it('prefillAsVersion lets the recipe helpers see which stages are filled', () => {

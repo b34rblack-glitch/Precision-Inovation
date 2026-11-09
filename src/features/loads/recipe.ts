@@ -130,7 +130,6 @@ export function ingredientRows(v: LoadVersion): RecipeRow[] {
         : null,
     },
     { label: 'Case lot', value: trimmed(v.caseLotNumber) },
-    { label: 'Rounds loaded', value: v.roundsLoaded == null ? null : String(v.roundsLoaded) },
   ]);
 }
 

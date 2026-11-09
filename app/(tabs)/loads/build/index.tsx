@@ -2,10 +2,12 @@ import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Alert } from 'react-native';
+import { addBatch } from '@/db/repositories/batches';
 import { createLoad } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import { createWorkup } from '@/db/repositories/workups';
 import { BuildLoadWizard } from '@/features/loads/BuildLoadWizard';
+import { roundsLoadedOf } from '@/features/loads/buildLoad';
 import { parseDecimal } from '@/lib/parse';
 import { distanceToYd } from '@/lib/units';
 import { DEFAULT_SHOTS_PER_CHARGE } from '@/lib/workup/seriesGenerator';
@@ -39,6 +41,7 @@ export default function BuildLoadScreen() {
           }
           const load = await createLoad(meta, components);
           let workupId: string | null = null;
+          let batchRounds: number | null = null;
           if (d.stringType === 'ladder' && meta.rifleId && components.chargeGr != null) {
             const rifle = rifles.find((r) => r.id === meta.rifleId);
             const distance = parseDecimal(d.testDistance);
@@ -62,10 +65,34 @@ export default function BuildLoadScreen() {
             });
             workupId = workup.id;
           }
+          // A batch run opens its batch-log row straight away, with the lots the
+          // walkthrough already collected. Runout and the fired mark get filled
+          // in later from the load screen.
+          if (d.stringType === 'batch') {
+            const quantity = roundsLoadedOf(d);
+            if (quantity != null && load.currentVersionId) {
+              await addBatch({
+                loadVersionId: load.currentVersionId,
+                date: new Date(),
+                quantity,
+                brassLot: components.caseLotNumber ?? null,
+                powderLot: components.powderLotNumber ?? null,
+                primerLot: components.primerLotNumber ?? null,
+                bulletLot: components.bulletLotNumber ?? null,
+                runoutReadingsIn: null,
+                runoutThresholdIn: null,
+                firedAt: null,
+                notes: null,
+              });
+              batchRounds = quantity;
+            }
+          }
           reset();
           // The hand-off replaces the walkthrough so Back never lands on a finished wizard.
           router.replace(
-            `/loads/build/done?loadId=${load.id}${workupId ? `&workupId=${workupId}` : ''}`,
+            `/loads/build/done?loadId=${load.id}${workupId ? `&workupId=${workupId}` : ''}${
+              batchRounds != null ? `&rounds=${batchRounds}` : ''
+            }`,
           );
         } catch (e) {
           Alert.alert('Save failed', e instanceof Error ? e.message : String(e));

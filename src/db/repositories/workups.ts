@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull } from 'drizzle-orm';
 import { db } from '@/db/client';
 import { newId, now } from '@/db/ids';
 import { deleteRow, insertRow, insertRows, mutate, updateRow } from '@/db/mutate';
@@ -11,6 +11,14 @@ export function workupsForLoadQuery(loadId: string) {
     .from(workups)
     .where(and(eq(workups.loadId, loadId), isNull(workups.archivedAt)))
     .orderBy(desc(workups.createdAt));
+}
+
+export function archivedWorkupsForLoadQuery(loadId: string) {
+  return db
+    .select()
+    .from(workups)
+    .where(and(eq(workups.loadId, loadId), isNotNull(workups.archivedAt)))
+    .orderBy(desc(workups.archivedAt));
 }
 
 export function workupByIdQuery(id: string) {
@@ -117,6 +125,10 @@ export async function updateStepResult(
   mutate((tx) => updateRow(tx, 'workupSteps', stepId, data));
 }
 
+export async function unarchiveWorkup(id: string): Promise<void> {
+  mutate((tx) => updateRow(tx, 'workups', id, { archivedAt: null }));
+}
+
 export async function archiveWorkup(id: string): Promise<void> {
   mutate((tx) => {
     const [existing] = tx
@@ -212,8 +224,7 @@ export async function promoteChargeToVersion(workupId: string, chargeGr: number)
       brass: base?.brass ?? null,
       brassFirings: base?.brassFirings ?? null,
       // A promoted charge is a new recipe — nothing has been loaded of it yet.
-      roundsLoaded: null,
-      cbtoIn: base?.cbtoIn ?? null,
+        cbtoIn: base?.cbtoIn ?? null,
       coalIn: base?.coalIn ?? null,
       crimp: base?.crimp ?? null,
       muzzleVelocityFps: measuredMv,

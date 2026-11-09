@@ -27,8 +27,11 @@ const DEFAULTS: Partial<Record<TableName, Record<string, unknown>>> = {
     twistRight: true,
     archivedAt: null,
   },
+  benchItems: { kind: 'powder', name: 'Hodgdon H4350', source: 'manual', cartridge: null },
+  landsMeasurements: { rifleId: 'rifle-1', cbtoIn: 2.2, measuredAt: new Date(T0) },
   loads: { name: '6.5CM 140 ELD-M', rifleId: null, currentVersionId: null, archivedAt: null },
   loadVersions: { loadId: 'load-1', versionNumber: 1, parentVersionId: null },
+  loadBatches: { loadVersionId: 'ver-1', date: new Date(T0), quantity: 20, runoutReadingsIn: null },
   workups: {
     rifleId: 'rifle-1',
     loadId: 'load-1',
@@ -39,7 +42,7 @@ const DEFAULTS: Partial<Record<TableName, Record<string, unknown>>> = {
     archivedAt: null,
   },
   workupSteps: { workupId: 'workup-1', seq: 1, chargeGr: 41 },
-  rangeSessions: { rifleId: 'rifle-1', loadVersionId: null, date: new Date(T0), archivedAt: null },
+  rangeSessions: { rifleId: 'rifle-1', loadVersionId: null, batchId: null, date: new Date(T0), archivedAt: null },
   shotStrings: {
     sessionId: 'session-1',
     workupStepId: null,
@@ -61,6 +64,14 @@ const DEFAULTS: Partial<Record<TableName, Record<string, unknown>>> = {
     useLoggedWind: false,
     spinDriftEnabled: true,
     archivedAt: null,
+  },
+  targetPhotos: {
+    workupId: 'workup-1',
+    workupStepId: null,
+    sessionId: null,
+    fileName: 'photo-1.jpg',
+    sha256: null,
+    caption: null,
   },
 };
 

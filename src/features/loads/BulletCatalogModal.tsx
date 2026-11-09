@@ -12,43 +12,95 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Chip } from '@/components/Chip';
 import {
+  bestBc,
   BULLET_MAKERS,
   BulletMaker,
-  CALIBERS,
   caliberLabelForDiameter,
+  CALIBERS,
   CatalogBullet,
   searchBullets,
 } from '@/data/bulletCatalog';
+import type { BenchItem } from '@/db/schema';
+import { benchHasCatalogBullet, defaultPickerMode, itemsOfKind, normalizeName, type PickerMode } from '@/lib/bench/model';
 import { colors, radii, spacing, touchTarget, type } from '@/theme';
+
+/** What a pick hands back: a catalog bullet or a bench one, same shape. */
+export type PickedBullet = {
+  maker: string;
+  model: string;
+  weightGr: number | null;
+  diameterIn: number | null;
+  bcValue: number | null;
+  bcModel: 'G1' | 'G7' | null;
+  caliber: string | null;
+};
 
 type Props = {
   visible: boolean;
-  onClose: () => void;
-  onSelect: (bullet: CatalogBullet) => void;
+  /** The bench's bullets; with any, the catalog opens on "Mine". */
+  benchItems?: readonly BenchItem[];
   /** Bore to filter to when the picker opens (e.g. from the rifle's cartridge). Clearable. */
   defaultDiameterIn?: number | null;
+  onClose: () => void;
+  onSelect: (bullet: PickedBullet) => void;
 };
 
-export function BulletCatalogModal({ visible, onClose, onSelect, defaultDiameterIn }: Props) {
+const fromCatalog = (b: CatalogBullet): PickedBullet => {
+  const bc = bestBc(b);
+  return { maker: b.maker, model: b.model, weightGr: b.weightGr, diameterIn: b.diameterIn, bcValue: bc?.bcValue ?? null, bcModel: bc?.bcModel ?? null, caliber: b.caliber };
+};
+const fromBench = (i: BenchItem): PickedBullet => ({
+  maker: i.bulletMake ?? '',
+  model: i.bulletModel ?? '',
+  weightGr: i.bulletWeightGr,
+  diameterIn: i.bulletDiameterIn,
+  bcValue: i.bcValue,
+  bcModel: i.bcModel,
+  caliber: null,
+});
+
+export function BulletCatalogModal({
+  visible,
+  benchItems = [],
+  onClose,
+  onSelect,
+  defaultDiameterIn,
+}: Props) {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const [maker, setMaker] = useState<BulletMaker | null>(null);
+  const mine = useMemo(() => itemsOfKind(benchItems, 'bullet'), [benchItems]);
+  const [mode, setMode] = useState<PickerMode>('all');
   // Re-seeded from the rifle every time the picker opens; "All calibers" clears it.
   const [diameter, setDiameter] = useState<number | null>(defaultDiameterIn ?? null);
   useEffect(() => {
-    if (visible) setDiameter(defaultDiameterIn ?? null);
-  }, [visible, defaultDiameterIn]);
+    if (visible) {
+      setMode(defaultPickerMode(benchItems, 'bullet'));
+      setDiameter(defaultDiameterIn ?? null);
+    }
+  }, [visible, benchItems, defaultDiameterIn]);
 
-  const results = useMemo(
-    () => searchBullets(query, maker, diameter),
-    [query, maker, diameter],
-  );
+  const results = useMemo<PickedBullet[]>(() => {
+    const catalog = searchBullets(query, maker, diameter);
+    if (mode === 'all') return catalog.map(fromCatalog);
+    // Mine: catalog bullets on the bench, then bench bullets the catalog lacks.
+    const owned = catalog.filter((b) => benchHasCatalogBullet(benchItems, b)).map(fromCatalog);
+    const known = new Set(owned.map((b) => normalizeName(`${b.maker} ${b.model}`)));
+    const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const custom = mine
+      .filter((i) => !known.has(normalizeName(`${i.bulletMake} ${i.bulletModel}`)) && !known.has(normalizeName(i.name)))
+      .filter((i) => !maker || normalizeName(i.bulletMake) === normalizeName(maker))
+      .filter(
+        (i) =>
+          diameter == null ||
+          (i.bulletDiameterIn != null && Math.abs(i.bulletDiameterIn - diameter) < 0.0005),
+      )
+      .filter((i) => terms.every((t) => i.name.toLowerCase().includes(t)))
+      .map(fromBench);
+    return [...owned, ...custom];
+  }, [query, maker, mode, diameter, benchItems, mine]);
 
-  const bcLabel = (b: CatalogBullet) => {
-    if (b.bcG7 != null) return `G7 ${b.bcG7.toFixed(3)}`;
-    if (b.bcG1 != null) return `G1 ${b.bcG1.toFixed(3)}`;
-    return '—';
-  };
+  const bcLabel = (b: PickedBullet) => (b.bcValue != null ? `${b.bcModel ?? ''} ${b.bcValue.toFixed(3)}`.trim() : '—');
 
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} transparent={false}>
@@ -85,14 +137,24 @@ export function BulletCatalogModal({ visible, onClose, onSelect, defaultDiameter
           ) : null}
         </View>
 
+        {mine.length > 0 ? (
+          <View style={[styles.makerRow, { paddingBottom: 0 }]}>
+            <Chip label="Mine" selected={mode === 'mine'} onPress={() => setMode('mine')} />
+            <Chip label="All" selected={mode === 'all'} onPress={() => setMode('all')} />
+          </View>
+        ) : null}
         <View style={styles.makerRow}>
-          <Chip label="All" selected={maker === null} onPress={() => setMaker(null)} />
+          <Chip label="All makers" selected={maker === null} onPress={() => setMaker(null)} />
           {BULLET_MAKERS.map((m) => (
             <Chip key={m} label={m} selected={maker === m} onPress={() => setMaker(m)} />
           ))}
         </View>
         <View style={[styles.makerRow, { paddingTop: 0 }]} accessibilityLabel="Caliber filter">
-          <Chip label="All calibers" selected={diameter === null} onPress={() => setDiameter(null)} />
+          <Chip
+            label="All calibers"
+            selected={diameter === null}
+            onPress={() => setDiameter(null)}
+          />
           {CALIBERS.map((c) => (
             <Chip
               key={c.label}
@@ -111,9 +173,11 @@ export function BulletCatalogModal({ visible, onClose, onSelect, defaultDiameter
           ListEmptyComponent={
             <View style={styles.empty}>
               <Text style={[type.secondary, { textAlign: 'center' }]}>
-                {diameter !== null
-                  ? `No ${caliberLabelForDiameter(diameter) ?? ''} bullets match your search.`
-                  : 'No bullets match your search.'}
+                {mode === 'mine' && !query
+                  ? 'No bullets on your bench yet. Tap All.'
+                  : diameter !== null
+                    ? `No ${caliberLabelForDiameter(diameter) ?? ''} bullets match your search.`
+                    : 'No bullets match your search.'}
               </Text>
               {diameter !== null ? (
                 <Chip
@@ -131,7 +195,7 @@ export function BulletCatalogModal({ visible, onClose, onSelect, defaultDiameter
                 onClose();
               }}
               accessibilityRole="button"
-              accessibilityLabel={`${item.maker} ${item.weightGr} grain ${item.model}, ${item.caliber}, ${bcLabel(item)}`}
+              accessibilityLabel={`${item.maker} ${item.weightGr ?? ''} grain ${item.model}, ${bcLabel(item)}`}
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
             >
               <View style={{ flex: 1 }}>
@@ -139,7 +203,7 @@ export function BulletCatalogModal({ visible, onClose, onSelect, defaultDiameter
                   {item.maker} {item.model}
                 </Text>
                 <Text style={[type.secondary, { marginTop: 2 }]}>
-                  {item.caliber} · {item.weightGr} gr
+                  {[item.caliber, item.weightGr != null ? `${item.weightGr} gr` : null].filter(Boolean).join(' · ') || 'on your bench'}
                 </Text>
               </View>
               <Text style={styles.bc}>{bcLabel(item)}</Text>

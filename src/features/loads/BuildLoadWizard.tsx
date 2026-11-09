@@ -27,7 +27,6 @@ import {
 } from '@/components/Form';
 import { ListPickerModal } from '@/components/ListPickerModal';
 import { Screen } from '@/components/Screen';
-import { bestBc, CatalogBullet } from '@/data/bulletCatalog';
 import { boreDiameterForCartridge } from '@/data/cartridgeBores';
 import {
   BRASS_OPTIONS,
@@ -37,6 +36,7 @@ import {
   SEATING_DIE_OPTIONS,
   SIZING_DIE_OPTIONS,
 } from '@/data/componentCatalog';
+import { benchItemsQuery } from '@/db/repositories/bench';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
 import type { Rifle } from '@/db/schema';
 import {
@@ -54,7 +54,7 @@ import {
   stepsFor,
   validateStep,
 } from '@/features/loads/buildLoad';
-import { BulletCatalogModal } from '@/features/loads/BulletCatalogModal';
+import { BulletCatalogModal, type PickedBullet } from '@/features/loads/BulletCatalogModal';
 import { LoadForm, LoadFormResult } from '@/features/loads/LoadForm';
 import { SIZING_DIE_TYPE_CHOICES, YES_NO } from '@/features/loads/recipe';
 import { DEFAULT_STEP_COUNT } from '@/lib/workup/seriesGenerator';
@@ -98,6 +98,8 @@ export function BuildLoadWizard({ onSubmit }: Props) {
   const router = useRouter();
   const { draft, stepIndex, patch, setStep, reset } = useBuildLoad();
   const { data: rifles } = useLiveQuery(activeRiflesQuery());
+  // Same bench the full form shows, so both pickers open on what you own.
+  const { data: bench } = useLiveQuery(benchItemsQuery());
   const scrollRef = useRef<ScrollView>(null);
 
   const [maxReached, setMaxReached] = useState(stepIndex);
@@ -181,14 +183,15 @@ export function BuildLoadWizard({ onSubmit }: Props) {
     });
   };
 
-  const applyCatalogBullet = (bullet: CatalogBullet) => {
-    const bc = bestBc(bullet);
+  const applyCatalogBullet = (bullet: PickedBullet) => {
     patch({
       bulletMake: bullet.maker,
       bulletModel: bullet.model,
-      bulletWeight: bullet.weightGr.toString(),
-      bulletDiameter: bullet.diameterIn.toString(),
-      ...(bc ? { bcValue: bc.bcValue.toString(), bcModel: bc.bcModel } : {}),
+      ...(bullet.weightGr != null ? { bulletWeight: String(bullet.weightGr) } : {}),
+      ...(bullet.diameterIn != null ? { bulletDiameter: String(bullet.diameterIn) } : {}),
+      ...(bullet.bcValue != null && bullet.bcModel
+        ? { bcValue: String(bullet.bcValue), bcModel: bullet.bcModel }
+        : {}),
     });
     setErrors((e) => ({ ...e, bulletWeight: undefined, bcValue: undefined, bulletDiameter: undefined }));
   };
@@ -746,6 +749,7 @@ export function BuildLoadWizard({ onSubmit }: Props) {
 
       <BulletCatalogModal
         visible={picker === 'catalog'}
+        benchItems={bench}
         onClose={() => setPicker(null)}
         onSelect={applyCatalogBullet}
         defaultDiameterIn={boreDiameterForCartridge(draft.cartridge || rifle?.cartridge)}

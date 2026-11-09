@@ -556,7 +556,6 @@ export function draftToPrefill(draft: BuildDraft): LoadFormPrefill {
     crimp: str(draft.crimp),
     crimpDie: str(draft.crimpDie),
   };
-  if (draft.stringType === 'batch') version.roundsLoaded = roundsLoadedOf(draft);
   return {
     name: suggestLoadName(draft),
     cartridge: str(draft.cartridge),

@@ -54,8 +54,29 @@
     {
       "idx": 7,
       "version": "6",
-      "when": 1793604501163,
-      "tag": "0007_rounds_loaded",
+      "when": 1793506029553,
+      "tag": "0007_rifle_chamber_lands",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1793512250760,
+      "tag": "0008_bench_items",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1793593653449,
+      "tag": "0009_load_batches",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794195503525,
+      "tag": "0010_superb_hitman",
       "breakpoints": true
     }
   ]

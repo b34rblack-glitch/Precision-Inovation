@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "db42ca5e-ee36-4154-b490-60f21f0f7121",
+  "id": "d16f1f29-4f1d-46ff-ae6b-3a7f9f33e4f1",
   "prevId": "50ff3743-98b4-4416-bbdd-1f7a575e14dc",
   "tables": {
     "dope_entries": {
@@ -116,6 +116,122 @@
           "tableTo": "range_sessions",
           "columnsFrom": [
             "session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "lands_measurements": {
+      "name": "lands_measurements",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rifle_id": {
+          "name": "rifle_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bullet_make": {
+          "name": "bullet_make",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bullet_model": {
+          "name": "bullet_model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bullet_weight_gr": {
+          "name": "bullet_weight_gr",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "cbto_in": {
+          "name": "cbto_in",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "comparator_insert": {
+          "name": "comparator_insert",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "measured_at": {
+          "name": "measured_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "round_count": {
+          "name": "round_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "lands_measurements_rifle_idx": {
+          "name": "lands_measurements_rifle_idx",
+          "columns": [
+            "rifle_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "lands_measurements_rifle_id_rifles_id_fk": {
+          "name": "lands_measurements_rifle_id_rifles_id_fk",
+          "tableFrom": "lands_measurements",
+          "tableTo": "rifles",
+          "columnsFrom": [
+            "rifle_id"
           ],
           "columnsTo": [
             "id"
@@ -245,13 +361,6 @@
         },
         "brass_firings": {
           "name": "brass_firings",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "rounds_loaded": {
-          "name": "rounds_loaded",
           "type": "integer",
           "primaryKey": false,
           "notNull": false,
@@ -1158,6 +1267,203 @@
         "notes": {
           "name": "notes",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "headspace_in": {
+          "name": "headspace_in",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "headspace_insert": {
+          "name": "headspace_insert",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "chamber_spec": {
+          "name": "chamber_spec",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "freebore_in": {
+          "name": "freebore_in",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "chamber_neck_diameter_in": {
+          "name": "chamber_neck_diameter_in",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "magazine_max_coal_in": {
+          "name": "magazine_max_coal_in",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "barrel_maker": {
+          "name": "barrel_maker",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "barrel_contour": {
+          "name": "barrel_contour",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rifling_type": {
+          "name": "rifling_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "barrel_chambered_at": {
+          "name": "barrel_chambered_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "muzzle_device": {
+          "name": "muzzle_device",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "muzzle_device_notes": {
+          "name": "muzzle_device_notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "round_count_baseline": {
+          "name": "round_count_baseline",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "action_make": {
+          "name": "action_make",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "action_model": {
+          "name": "action_model",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bolt_face": {
+          "name": "bolt_face",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "stock": {
+          "name": "stock",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "trigger_make": {
+          "name": "trigger_make",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "trigger_pull_lb": {
+          "name": "trigger_pull_lb",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rifle_weight_lb": {
+          "name": "rifle_weight_lb",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reticle": {
+          "name": "reticle",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "focal_plane": {
+          "name": "focal_plane",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "click_value": {
+          "name": "click_value",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "turret_travel_per_rev": {
+          "name": "turret_travel_per_rev",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "zero_stop": {
+          "name": "zero_stop",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "rail_cant_moa": {
+          "name": "rail_cant_moa",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "ring_height_in": {
+          "name": "ring_height_in",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "zero_verified_at": {
+          "name": "zero_verified_at",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

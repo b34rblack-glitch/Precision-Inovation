@@ -1,6 +1,5 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Alert } from 'react-native';
 import { EmptyState } from '@/components/EmptyState';
 import { Screen } from '@/components/Screen';
 import { rifleByIdQuery, updateRifle } from '@/db/repositories/rifles';
@@ -26,19 +25,14 @@ export default function EditRifleScreen() {
   }
 
   return (
-    <Screen underHeader>
-      <RifleForm
-        initial={rifle}
-        submitLabel="Save Changes"
-        onSubmit={async (values) => {
-          try {
-            await updateRifle(rifle.id, values);
-            router.back();
-          } catch (e) {
-            Alert.alert('Save failed', e instanceof Error ? e.message : String(e));
-          }
-        }}
-      />
-    </Screen>
+    <RifleForm
+      initial={rifle}
+      submitLabel="Save Changes"
+      onSubmit={async (values) => {
+        // A thrown error is shown by the form as "Save failed".
+        await updateRifle(rifle.id, values);
+        return () => router.back();
+      }}
+    />
   );
 }

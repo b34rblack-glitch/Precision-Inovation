@@ -8,7 +8,8 @@ import { Fab } from '@/components/Buttons';
 import { Screen } from '@/components/Screen';
 import { activeLoadsQuery } from '@/db/repositories/loads';
 import { activeRiflesQuery } from '@/db/repositories/rifles';
-import { activeSessionsQuery } from '@/db/repositories/sessions';
+import { activeSessionsQuery, archivedSessionsQuery, unarchiveSession } from '@/db/repositories/sessions';
+import { ArchivedSection } from '@/components/ArchivedSection';
 import { colors, spacing, type } from '@/theme';
 
 export default function RangeScreen() {
@@ -16,6 +17,7 @@ export default function RangeScreen() {
   const { data: sessions, updatedAt: sessionsLoadedAt } = useLiveQuery(activeSessionsQuery());
   const { data: rifles } = useLiveQuery(activeRiflesQuery());
   const { data: loads } = useLiveQuery(activeLoadsQuery());
+  const { data: archivedSessions } = useLiveQuery(archivedSessionsQuery());
   const rifleName = (id: string) => rifles.find((r) => r.id === id)?.name ?? 'Rifle';
 
   // A range card needs a load assigned to the rifle — rifles without one
@@ -62,6 +64,21 @@ export default function RangeScreen() {
                 </View>
               </Card>
             ))}
+            <Card onPress={() => router.push(`/range/compare/${cardRifles[0]!.id}`)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Ionicons
+                  name="stats-chart-outline"
+                  size={22}
+                  color={colors.accent}
+                  style={{ marginRight: spacing.md }}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={type.body}>Compare loads</Text>
+                  <Text style={type.secondary}>Velocity, groups, holds and ladders, one rifle at a time</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={colors.textTertiary} />
+              </View>
+            </Card>
             <Text style={[type.label, { marginTop: spacing.lg, marginBottom: spacing.sm }]}>
               Sessions
             </Text>
@@ -97,6 +114,17 @@ export default function RangeScreen() {
             </Card>
           ))
         )}
+        <ArchivedSection
+          noun="session"
+          rows={archivedSessions.map((s) => ({
+            id: s.id,
+            title: `${new Date(s.date).toLocaleDateString()} · ${rifleName(s.rifleId)}`,
+            subtitle: s.location,
+            archivedAt: s.archivedAt,
+          }))}
+          onOpen={(id) => router.push(`/range/sessions/${id}`)}
+          onUnarchive={unarchiveSession}
+        />
       </Screen>
       <Fab onPress={() => router.push('/range/sessions/new')} accessibilityLabel="New session" />
     </>

@@ -16,7 +16,13 @@ import { colors, spacing, type } from '@/theme';
 
 export default function BuildLoadDoneScreen() {
   const router = useRouter();
-  const { loadId, workupId } = useLocalSearchParams<{ loadId: string; workupId?: string }>();
+  // `rounds` comes from the batch row the walkthrough just opened; the recipe
+  // version itself no longer carries a batch size.
+  const { loadId, workupId, rounds } = useLocalSearchParams<{
+    loadId: string;
+    workupId?: string;
+    rounds?: string;
+  }>();
   const { data: loadRows } = useLiveQuery(loadByIdQuery(loadId), [loadId]);
   const { data: versions } = useLiveQuery(versionsForLoadQuery(loadId), [loadId]);
   const load = loadRows[0];
@@ -78,7 +84,7 @@ export default function BuildLoadDoneScreen() {
         ) : (
           <>
             <Text style={[type.body, { marginTop: spacing.xs }]}>
-              {current.roundsLoaded != null ? `${current.roundsLoaded} rounds of:` : 'Rounds of:'}
+              {rounds ? `${rounds} rounds of:` : 'Rounds of:'}
             </Text>
             {ingredients.map((r) => (
               <View key={r.label} style={styles.row}>
