@@ -51,6 +51,20 @@ async function writeAndShare(name: string, backup: Backup, dialogTitle: string):
   }
 }
 
+/**
+ * A full copy written to the cache right before something destructive (a
+ * Replace, a permanent delete), so a mistake is recoverable from the file
+ * until the cache is cleared. Returns the file's path for the prompt.
+ */
+export async function writeSafetyBackup(name = 'precision-pre-restore-backup.json'): Promise<string> {
+  const backup = await buildBackup();
+  const file = new File(Paths.cache, name);
+  if (file.exists) file.delete();
+  file.create();
+  file.write(JSON.stringify(backup));
+  return file.uri;
+}
+
 export async function exportBackup(): Promise<void> {
   const backup = await buildBackup();
   const stamp = backup.exportedAt.slice(0, 10);

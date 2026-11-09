@@ -17,9 +17,15 @@ function fixture(): BackupTables {
   const t = '2026-10-04T17:00:00.000Z';
   const base = { createdAt: t, updatedAt: t };
   const tables: BackupTables = {
+    benchItems: [{ id: 'bench-1', kind: 'powder', name: 'Hodgdon H1000', source: 'manual', ...base }],
     rifles: [
       { id: 'rifle-a', name: 'A', photoUri: 'file:///a.jpg', photoSha256: 'abc', archivedAt: null, ...base },
       { id: 'rifle-b', name: 'B', photoUri: null, photoSha256: null, archivedAt: t, ...base },
+    ],
+    loadBatches: [{ id: 'batch-a', loadVersionId: 'ver-a1-2', date: t, ...base }],
+    landsMeasurements: [
+      { id: 'lands-a', rifleId: 'rifle-a', cbtoIn: 2.931, measuredAt: t, ...base },
+      { id: 'lands-b', rifleId: 'rifle-b', cbtoIn: 2.2, measuredAt: t, ...base },
     ],
     loads: [
       { id: 'load-a1', name: 'A1', rifleId: 'rifle-a', currentVersionId: 'ver-a1-2', archivedAt: null, ...base },

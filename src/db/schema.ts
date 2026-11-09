@@ -48,9 +48,107 @@ export const rifles = sqliteTable('rifles', {
   // fetch the blob and point its own photoUri at a local copy.
   photoSha256: text('photo_sha256'),
   notes: text('notes'),
+
+  // Chamber and throat: the measurements handloading decisions hang on.
+  // Headspace is a comparator reading on a fired case (Hornady insert noted
+  // alongside); the load's shoulder bump is checked against it. The magazine
+  // length caps a load's COAL. Distance to the lands is per bullet and changes
+  // with throat wear, so it lives in its own table (landsMeasurements).
+  headspaceIn: real('headspace_in'),
+  headspaceInsert: text('headspace_insert'), // e.g. "Hornady .420"
+  chamberSpec: text('chamber_spec'), // SAAMI / match / custom reamer name
+  freeboreIn: real('freebore_in'),
+  chamberNeckDiameterIn: real('chamber_neck_diameter_in'),
+  magazineMaxCoalIn: real('magazine_max_coal_in'),
+
+  // Barrel and muzzle. The muzzle device matters because a suppressor shifts
+  // zero and velocity; round count starts from a baseline the user enters and
+  // grows with every chronograph string the app records for this rifle.
+  barrelMaker: text('barrel_maker'),
+  barrelContour: text('barrel_contour'),
+  riflingType: text('rifling_type'), // cut / button / 5R / hammer-forged
+  barrelChamberedAt: integer('barrel_chambered_at', { mode: 'timestamp_ms' }),
+  muzzleDevice: text('muzzle_device'), // bare / brake / suppressor, free text
+  muzzleDeviceNotes: text('muzzle_device_notes'), // POI shift on/off etc.
+  roundCountBaseline: integer('round_count_baseline'),
+
+  // Action, trigger and furniture: record-keeping. Weight feeds nothing yet.
+  actionMake: text('action_make'),
+  actionModel: text('action_model'),
+  boltFace: text('bolt_face'),
+  stock: text('stock'),
+  triggerMake: text('trigger_make'),
+  triggerPullLb: real('trigger_pull_lb'),
+  rifleWeightLb: real('rifle_weight_lb'),
+
+  // Optic detail. clickValue and turretTravelPerRev are in turretUnit; rail
+  // cant is always MOA (that is how bases are sold).
+  reticle: text('reticle'),
+  focalPlane: text('focal_plane', { enum: ['FFP', 'SFP'] }),
+  clickValue: real('click_value'),
+  turretTravelPerRev: real('turret_travel_per_rev'),
+  zeroStop: integer('zero_stop', { mode: 'boolean' }).notNull().default(false),
+  railCantMoa: real('rail_cant_moa'),
+  ringHeightIn: real('ring_height_in'),
+
+  // Set to the session date whenever a confirmed hold is logged at the zero
+  // distance, so the detail screen can say how stale the zero is.
+  zeroVerifiedAt: integer('zero_verified_at', { mode: 'timestamp_ms' }),
   ...timestamps,
   ...archivable,
 });
+
+// Distance to the lands, per bullet, as a cartridge-base-to-ogive reading in
+// this rifle's chamber. Belongs to the rifle, not a load: every load that
+// seats this bullet derives its jump from the latest entry, and the series
+// over round count is the throat-erosion record.
+export const landsMeasurements = sqliteTable(
+  'lands_measurements',
+  {
+    id: id(),
+    rifleId: text('rifle_id')
+      .notNull()
+      .references(() => rifles.id),
+    bulletMake: text('bullet_make'),
+    bulletModel: text('bullet_model'),
+    bulletWeightGr: real('bullet_weight_gr'),
+    cbtoIn: real('cbto_in').notNull(),
+    comparatorInsert: text('comparator_insert'),
+    measuredAt: integer('measured_at', { mode: 'timestamp_ms' }).notNull(),
+    roundCount: integer('round_count'),
+    notes: text('notes'),
+    ...timestamps,
+  },
+  (t) => [index('lands_measurements_rifle_idx').on(t.rifleId)],
+);
+
+// What is on the user's bench: the components and tools the pickers should
+// show first. A row is either ticked by hand on the My Bench screen or
+// learned from a saved load. Bullets carry their own fields so a custom
+// bullet can fill the load form like a catalog one; everything else is a
+// name. No foreign keys: the bench is independent of any rifle or load.
+export const benchItems = sqliteTable(
+  'bench_items',
+  {
+    id: id(),
+    kind: text('kind', {
+      enum: ['bullet', 'powder', 'primer', 'brass', 'sizingDie', 'seatingDie', 'press'],
+    }).notNull(),
+    /** Display name; for bullets "Make Model Weight gr". Matched case-insensitively. */
+    name: text('name').notNull(),
+    /** Dies are for one cartridge; the load form sorts matching dies first. */
+    cartridge: text('cartridge'),
+    source: text('source', { enum: ['manual', 'learned'] }).notNull().default('manual'),
+    bulletMake: text('bullet_make'),
+    bulletModel: text('bullet_model'),
+    bulletWeightGr: real('bullet_weight_gr'),
+    bulletDiameterIn: real('bullet_diameter_in'),
+    bcValue: real('bc_value'),
+    bcModel: text('bc_model', { enum: ['G1', 'G7'] }),
+    ...timestamps,
+  },
+  (t) => [index('bench_items_kind_idx').on(t.kind)],
+);
 
 export const loads = sqliteTable(
   'loads',
@@ -155,6 +253,37 @@ export const loadVersions = sqliteTable(
   (t) => [index('load_versions_load_idx').on(t.loadId)],
 );
 
+// One loading session of a recipe: the day a batch of rounds was built from
+// a load version, with the lots used and the runout readings taken. Readings
+// are stored as entered (inches) and summarised on save; a range session can
+// point at the batch it shot so groups and strings tie back to the rounds.
+export const loadBatches = sqliteTable(
+  'load_batches',
+  {
+    id: id(),
+    loadVersionId: text('load_version_id')
+      .notNull()
+      .references(() => loadVersions.id),
+    date: integer('date', { mode: 'timestamp_ms' }).notNull(),
+    quantity: integer('quantity'),
+    brassLot: text('brass_lot'),
+    powderLot: text('powder_lot'),
+    primerLot: text('primer_lot'),
+    bulletLot: text('bullet_lot'),
+    /** Individual readings, inches, as entered; null when only a summary was typed. */
+    runoutReadingsIn: text('runout_readings_in', { mode: 'json' }).$type<number[]>(),
+    runoutAvgIn: real('runout_avg_in'),
+    runoutMaxIn: real('runout_max_in'),
+    /** Readings at or under this count as match-grade; default 0.002 in. */
+    runoutThresholdIn: real('runout_threshold_in'),
+    /** Set when the batch has been shot, so its quantity joins the rifle's round count. */
+    firedAt: integer('fired_at', { mode: 'timestamp_ms' }),
+    notes: text('notes'),
+    ...timestamps,
+  },
+  (t) => [index('load_batches_version_idx').on(t.loadVersionId)],
+);
+
 export const workups = sqliteTable(
   'workups',
   {
@@ -249,6 +378,8 @@ export const rangeSessions = sqliteTable(
       .notNull()
       .references(() => rifles.id),
     loadVersionId: text('load_version_id').references(() => loadVersions.id),
+    /** The batch of rounds this session shot, when known. */
+    batchId: text('batch_id').references(() => loadBatches.id),
     date: integer('date', { mode: 'timestamp_ms' }).notNull(),
     location: text('location'),
     tempF: real('temp_f'),
@@ -399,10 +530,17 @@ export const syncState = sqliteTable('sync_state', {
 
 export type Rifle = typeof rifles.$inferSelect;
 export type NewRifle = typeof rifles.$inferInsert;
+export type BenchItem = typeof benchItems.$inferSelect;
+export type NewBenchItem = typeof benchItems.$inferInsert;
+export type BenchKind = BenchItem['kind'];
+export type LandsMeasurement = typeof landsMeasurements.$inferSelect;
+export type NewLandsMeasurement = typeof landsMeasurements.$inferInsert;
 export type Load = typeof loads.$inferSelect;
 export type NewLoad = typeof loads.$inferInsert;
 export type LoadVersion = typeof loadVersions.$inferSelect;
 export type NewLoadVersion = typeof loadVersions.$inferInsert;
+export type LoadBatch = typeof loadBatches.$inferSelect;
+export type NewLoadBatch = typeof loadBatches.$inferInsert;
 export type Workup = typeof workups.$inferSelect;
 export type NewWorkup = typeof workups.$inferInsert;
 export type WorkupStep = typeof workupSteps.$inferSelect;

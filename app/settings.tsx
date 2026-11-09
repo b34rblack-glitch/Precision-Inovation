@@ -1,16 +1,18 @@
 import * as DocumentPicker from 'expo-document-picker';
-import { File, Paths } from 'expo-file-system';
+import { File } from 'expo-file-system';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Text } from 'react-native';
+import { Alert, Share, Text } from 'react-native';
 import { Button } from '@/components/Buttons';
 import { Card } from '@/components/Card';
 import { Screen } from '@/components/Screen';
 import { AddFromBackupModal } from '@/features/backup/AddFromBackupModal';
 import { SyncCard } from '@/features/sync/SyncCard';
 import { addFromBackup } from '@/db/repositories/importBackup';
-import { buildBackup, exportBackup, restoreBackup } from '@/lib/backup';
+import { exportBackup, restoreBackup, writeSafetyBackup } from '@/lib/backup';
+import { clearCrashReport, formatCrashReport, readCrashReport, type CrashReport } from '@/lib/crashLog';
 import { describeBackup, parseBackup, type BackupSummary, type ImportSelection } from '@/lib/share';
-import { spacing, type } from '@/theme';
+import { colors, spacing, type } from '@/theme';
 
 /** Open a JSON file from the device and return its text, or null if cancelled. */
 async function pickJsonFile(): Promise<string | null> {
@@ -23,12 +25,14 @@ async function pickJsonFile(): Promise<string | null> {
 }
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   // "Add from backup": the parsed file waits here while the picker is open.
   const [pending, setPending] = useState<{ json: string; summary: BackupSummary } | null>(null);
   const [adding, setAdding] = useState(false);
   const busy = exporting || importing || adding;
+  const [crash, setCrash] = useState<CrashReport | null>(() => readCrashReport());
 
   const doExport = async () => {
     setExporting(true);
@@ -39,16 +43,6 @@ export default function SettingsScreen() {
     } finally {
       setExporting(false);
     }
-  };
-
-  // Written to cache right before a restore wipes the database, so a bad
-  // import file can't silently destroy the only copy of the user's data.
-  const writeSafetyBackup = async (): Promise<void> => {
-    const backup = await buildBackup();
-    const file = new File(Paths.cache, 'precision-pre-restore-backup.json');
-    if (file.exists) file.delete();
-    file.create();
-    file.write(JSON.stringify(backup));
   };
 
   // Merge: add selected rifles from a backup or a friend's shared rifle file
@@ -127,6 +121,55 @@ export default function SettingsScreen() {
 
   return (
     <Screen underHeader>
+      {crash ? (
+        <Card>
+          <Text style={type.heading}>Last crash</Text>
+          <Text style={[type.secondary, { marginTop: spacing.sm }]}>
+            The app closed unexpectedly on {new Date(crash.at).toLocaleString()}. Share this report
+            with whoever is fixing it; the last actions before the crash are included.
+          </Text>
+          <Text
+            style={[type.caption, { fontFamily: 'monospace', color: colors.text, marginVertical: spacing.md }]}
+            selectable
+            numberOfLines={12}
+          >
+            {formatCrashReport(crash)}
+          </Text>
+          <Button
+            label="Share Report"
+            onPress={() => void Share.share({ message: formatCrashReport(crash) })}
+          />
+          <Button
+            label="Dismiss"
+            variant="secondary"
+            onPress={() => {
+              clearCrashReport();
+              setCrash(null);
+            }}
+            style={{ marginTop: spacing.md }}
+          />
+        </Card>
+      ) : null}
+
+      <Card>
+        <Text style={type.heading}>My bench</Text>
+        <Text style={[type.secondary, { marginTop: spacing.sm, marginBottom: spacing.lg }]}>
+          Tick the bullets, powders, primers, brass, dies and presses you own, add gear the catalogs
+          lack, and tag dies with their cartridge. Load pickers then open on your bench instead of
+          the whole list.
+        </Text>
+        <Button label="Open My Bench" variant="secondary" onPress={() => router.push('/bench')} />
+      </Card>
+
+      <Card>
+        <Text style={type.heading}>Load form fields</Text>
+        <Text style={[type.secondary, { marginTop: spacing.sm, marginBottom: spacing.lg }]}>
+          Hide the parts of the load form you never use. Simple shows what most loaders track; any
+          group with data on a load always shows.
+        </Text>
+        <Button label="Choose Fields" variant="secondary" onPress={() => router.push('/form-fields')} />
+      </Card>
+
       <SyncCard />
 
       <Card>

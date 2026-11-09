@@ -7,15 +7,27 @@ Existing reloading apps bury you in required fields and never connect a firearm 
 to real range results. This app is built around exactly that missing loop:
 
 1. **Rifles** — profiles for each firearm: cartridge, barrel, optic, sight height,
-   turret units (MIL or MOA per rifle), distance units (yards or meters per rifle), zero.
-   Only the name is required; everything else is progressive disclosure.
+   turret units (MIL or MOA per rifle), distance units (yards or meters per rifle), zero,
+   plus the chamber (headspace, magazine length, reamer), barrel and muzzle device,
+   action and trigger, optic detail (click value snaps card holds), a round count, a
+   zero-check date, and a per-bullet distance-to-lands log that loads derive their
+   jump from. Only the name is required; everything else is progressive disclosure.
 2. **Loads** — versioned recipes (bullet, BC, powder, charge, primer, brass, CBTO/COAL).
    Editing a load that already has range history automatically creates a **new version**,
    so old results stay tied to the exact recipe that produced them. Guided workups walk
    you through **ladder**, **OCW**, and **velocity (Satterlee)** tests: the app generates
    the charge series, gives you per-charge entry sheets, computes SD/ES from per-shot
    chrono velocities, highlights **velocity flat spots**, and lets you promote the winning
-   charge to a new load version in one tap.
+   charge to a new load version in one tap. **Print Recipe Sheet** turns the current
+   version into a PDF with bench targets, ingredients, every stage with tick boxes and a
+   batch log, so the load can be built without the phone. **My Bench** (Settings) holds
+   what you own: tick catalog items or add your own, tag dies by cartridge, and every
+   picker opens on your bench with the full catalog one tap away; anything saved on a
+   load joins the bench by itself. **Duplicate** copies a load to make a variant. A
+   **batch log** per load records each loading session (rounds, lots, runout readings
+   with average, max and a match-threshold count); batches print on the recipe sheet,
+   chart on Compare Loads, link to the range session that shot them, and count toward
+   the rifle's rounds once marked shot.
 3. **Range** — log sessions (conditions, chrono strings, target results) and record the
    holds that actually worked (**DOPE**). The **range card** is hybrid: a built-in
    point-mass ballistic solver (G1/G7) predicts every distance, and your confirmed DOPE
@@ -23,7 +35,10 @@ to real range results. This app is built around exactly that missing loop:
    **●**, predictions **○**. One tap trues muzzle velocity against your confirmed
    long-range holds. Cards come in **Bench** and **Hunting** presets, a high-contrast
    **field mode** (amber on black, huge digits, screen stays awake), and **PDF export**
-   sized for a stock pack.
+   sized for a stock pack. **Compare loads** puts every load tested in a rifle side by
+   side: velocity (average, SD, ES), velocity over time, group size by distance, logged
+   elevation holds and the latest charge ladder, with hide/show per load, date and
+   distance sliders, a minimum-shots filter and a tap-to-read hairline on every chart.
 
 **Share a rifle.** Any rifle can be exported on its own, with its loads, sessions, DOPE and
 range cards, as a file a friend adds to their app from Settings → Add from Backup. Adding
@@ -52,6 +67,9 @@ npm start            # Expo dev server → scan QR with Expo Go
 npm test             # Vitest: units, atmosphere, solver, merge, workup stats
 npm run typecheck    # tsc --noEmit
 ```
+
+See `ANDROID_BUILD.md` for the installable Android APK that every push builds, and
+`IOS_BUILD.md` for iPhone.
 
 Database schema lives in `src/db/schema.ts`; regenerate migrations with
 `npx drizzle-kit generate` after schema changes. This repo is the only place

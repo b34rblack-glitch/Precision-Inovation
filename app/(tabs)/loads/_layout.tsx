@@ -15,7 +15,6 @@ export default function LoadsLayout() {
       <Stack.Screen name="[id]/index" options={{ title: '' }} />
       <Stack.Screen name="[id]/edit" options={{ title: 'Load' }} />
       <Stack.Screen name="new" options={{ title: 'New Load' }} />
-      <Stack.Screen name="wizard" options={{ title: 'Guided Setup' }} />
       <Stack.Screen name="[id]/workups/new" options={{ title: 'New Workup' }} />
       <Stack.Screen name="[id]/workups/[wid]" options={{ title: 'Workup' }} />
     </Stack>

@@ -27,6 +27,11 @@ type Props = {
   underHeader?: boolean;
   /** Passed through to KeyboardAvoidingView (e.g. header height on iOS). */
   keyboardVerticalOffset?: number;
+  /**
+   * Pinned below the scroll area (and above the keyboard), so a long form's
+   * save button is always in reach. Scroll screens only.
+   */
+  footer?: ReactNode;
 };
 
 export function Screen({
@@ -38,6 +43,7 @@ export function Screen({
   fabClearance,
   underHeader,
   keyboardVerticalOffset = 0,
+  footer,
 }: Props) {
   const insets = useSafeAreaInsets();
   const paddingTop = underHeader ? spacing.sm : insets.top + spacing.sm;
@@ -75,6 +81,7 @@ export function Screen({
         >
           {children}
         </ScrollView>
+        {footer ? <View style={styles.footer}>{footer}</View> : null}
       </KeyboardAvoidingView>
     </View>
   );
@@ -91,4 +98,14 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
   },
   scrollContent: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl },
+  // Tab scenes already sit above the tab bar, so no bottom safe-area inset here
+  // (same reasoning as the FAB).
+  footer: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bg,
+  },
 });
