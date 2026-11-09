@@ -108,9 +108,12 @@ describe('Phoenix workspace import file', () => {
     const db = freshDatabase();
     const counts = restore(db, json);
     expect(counts).toEqual({
+      benchItems: 0,
       rifles: 2,
+      landsMeasurements: 5,
       loads: 2,
       loadVersions: 2,
+      loadBatches: 0,
       workups: 0,
       workupSteps: 0,
       rangeSessions: 2,
@@ -150,6 +153,19 @@ describe('Phoenix workspace import file', () => {
       expect(dope).toEqual({ d: 100, e: 0, u: unit, c: 1 });
     }
     expect(IDS.cross.rifle).not.toBe(IDS.mpr.rifle);
+
+    // The MPR's distance-to-lands log: one reading per bullet, from Jared's sheet.
+    const lands = db
+      .prepare('SELECT bullet_model AS m, cbto_in AS c FROM lands_measurements WHERE rifle_id = ? ORDER BY cbto_in')
+      .all(IDS.mpr.rifle) as { m: string; c: number }[];
+    expect(lands).toEqual([
+      { m: 'ELD-X', c: 2.931 },
+      { m: 'LRX BT', c: 2.94 },
+      { m: 'Elite Hunter', c: 2.949 },
+      { m: 'AccuBond Long Range', c: 2.949 },
+      { m: 'Hammer Hunter', c: 2.985 },
+    ]);
+    expect(db.prepare('SELECT count(*) AS c FROM lands_measurements WHERE rifle_id = ?').get(IDS.cross.rifle)).toEqual({ c: 0 });
   });
 
   it('shares one rifle as a subset that restores on its own, and adds next to the full set', () => {

@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { rifleByIdQuery } from '@/db/repositories/rifles';
 import { useRangeCard } from '@/features/rangecard/useRangeCard';
+import { roundToClick } from '@/lib/rifle/profile';
 import { formatHold, holdToUnit, TurretUnit, ydToDistance } from '@/lib/units';
 import { colors } from '@/theme';
 
@@ -33,7 +34,10 @@ export default function FieldCardScreen() {
   const holdUnit: TurretUnit = holdUnitParam === 'MOA' || holdUnitParam === 'MIL'
     ? holdUnitParam
     : rifle.turretUnit;
-  const toHold = (v: number) => holdToUnit(v, rifle.turretUnit, holdUnit);
+  const toHold = (v: number) => {
+    const h = holdToUnit(v, rifle.turretUnit, holdUnit);
+    return holdUnit === rifle.turretUnit ? roundToClick(h, rifle.clickValue) : h;
+  };
 
   const unitWord = rifle.distanceUnit === 'yd' ? 'yards' : 'meters';
   // DRIFT column (spin + Coriolis hold) renders only when the effect is

@@ -19,6 +19,7 @@ import { QuickDopeModal, QuickDopeValues } from '@/features/rangecard/QuickDopeM
 import { quickAddDope } from '@/db/repositories/sessions';
 import { CardRow } from '@/lib/rangecard/merge';
 import { rangeCardHtml } from '@/lib/rangecard/pdfHtml';
+import { roundToClick } from '@/lib/rifle/profile';
 import { formatHold, holdToUnit, TurretUnit, ydToDistance } from '@/lib/units';
 import { colors, radii, spacing, touchTarget, type } from '@/theme';
 
@@ -83,8 +84,13 @@ export default function RangeCardScreen() {
   const distanceUnit = rifle.distanceUnit;
   const turretUnit = rifle.turretUnit;
   const holdUnit: TurretUnit = holdUnitOverride ?? turretUnit;
-  // Convert a hold value stored in the rifle's turret unit to the display unit.
-  const toHold = (v: number) => holdToUnit(v, turretUnit, holdUnit);
+  // Convert a hold value stored in the rifle's turret unit to the display unit,
+  // snapped to the scope's click when one is recorded and the display is the
+  // turret's own unit (a reticle holdover in the other unit has no clicks).
+  const toHold = (v: number) => {
+    const h = holdToUnit(v, turretUnit, holdUnit);
+    return holdUnit === turretUnit ? roundToClick(h, rifle.clickValue) : h;
+  };
   const unitWord = distanceUnit === 'yd' ? 'yards' : 'meters';
 
   // DRIFT column only earns its space when the effect is visible on paper.

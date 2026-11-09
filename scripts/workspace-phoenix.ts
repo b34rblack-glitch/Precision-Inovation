@@ -13,6 +13,7 @@
 import type { Backup } from '@/lib/backup';
 import type {
   DopeEntry,
+  LandsMeasurement,
   Load,
   LoadVersion,
   RangeCard,
@@ -47,6 +48,8 @@ export const IDS = {
 const STAMP = new Date('2026-10-24T12:00:00.000Z');
 /** Zero session: 4 Oct 2026, 10:00 MST (Arizona does not observe DST). */
 export const ZERO_DATE = new Date('2026-10-04T17:00:00.000Z');
+/** The day the MPR's distance-to-lands readings were taken. */
+export const LANDS_DATE = new Date('2026-10-29T00:00:00.000Z');
 
 export const ZERO_RANGE = {
   location: 'Phoenix Rod and Gun Club',
@@ -57,9 +60,47 @@ export const ZERO_RANGE = {
   humidityPct: 25,
 } as const;
 
+/**
+ * Chamber, barrel, action, optic detail and the zero check: none of it is
+ * known for these rifles, so every field is blank. Listed in full so a new
+ * rifle column cannot be left out of the file by accident.
+ */
+const UNKNOWN_PROFILE = {
+  headspaceIn: null,
+  headspaceInsert: null,
+  chamberSpec: null,
+  freeboreIn: null,
+  chamberNeckDiameterIn: null,
+  magazineMaxCoalIn: null,
+  barrelMaker: null,
+  barrelContour: null,
+  riflingType: null,
+  barrelChamberedAt: null,
+  muzzleDevice: null,
+  muzzleDeviceNotes: null,
+  roundCountBaseline: null,
+  actionMake: null,
+  actionModel: null,
+  boltFace: null,
+  stock: null,
+  triggerMake: null,
+  triggerPullLb: null,
+  rifleWeightLb: null,
+  reticle: null,
+  focalPlane: null,
+  clickValue: null,
+  turretTravelPerRev: null,
+  zeroStop: false,
+  railCantMoa: null,
+  ringHeightIn: null,
+  zeroVerifiedAt: null,
+} as const;
+
 type RifleSpec = {
   ids: (typeof IDS)[keyof typeof IDS];
   rifle: Omit<Rifle, 'id' | 'createdAt' | 'updatedAt' | 'archivedAt' | 'photoUri' | 'photoSha256'>;
+  /** Touch-the-lands readings in this chamber, per bullet. */
+  lands?: readonly Omit<LandsMeasurement, 'id' | 'rifleId' | 'createdAt' | 'updatedAt'>[];
   loadName: string;
   version: Pick<
     LoadVersion,
@@ -98,6 +139,9 @@ export const CROSS: RifleSpec = {
     notes:
       'Zeroed at 100 yd, Phoenix Rod and Gun Club, 4 Oct 2026, with Federal Terminal Ascent 175 gr. ' +
       'Sight height 2.1 in is an estimate (1.25 in rings + about 0.85 in bore to rail top): measure bore center to scope-tube center and update it.',
+    ...UNKNOWN_PROFILE,
+    clickValue: 0.1,
+    focalPlane: 'FFP',
   },
   loadName: 'Federal Terminal Ascent 175 gr (factory)',
   version: {
@@ -139,7 +183,21 @@ export const MPR: RifleSpec = {
     notes:
       'Zeroed at 100 yd, Phoenix Rod and Gun Club, 4 Oct 2026, with Hornady Precision Hunter 212 gr ELD-X. ' +
       'Sight height 1.9 in is an estimate (1.06 in rings + about 0.85 in bore to rail top): measure bore center to scope-tube center and update it.',
+    ...UNKNOWN_PROFILE,
+    clickValue: 0.25,
+    focalPlane: 'FFP',
+    ringHeightIn: 1.06,
+    zeroVerifiedAt: ZERO_DATE,
   },
+  // Jared's sheet, Oct 2026: the most common reading per bullet, or the mean
+  // when none repeats (see docs/range-cards/christensen-mpr-300prc-handloads.md).
+  lands: [
+    { bulletMake: 'Hornady', bulletModel: 'ELD-X', bulletWeightGr: 212, cbtoIn: 2.931, notes: 'Readings 2.931, 2.939, 2.931' },
+    { bulletMake: 'Barnes', bulletModel: 'LRX BT', bulletWeightGr: 208, cbtoIn: 2.94, notes: 'Readings 2.940, 2.945, 2.940' },
+    { bulletMake: 'Berger', bulletModel: 'Elite Hunter', bulletWeightGr: 205, cbtoIn: 2.949, notes: 'Readings 2.934, 2.948, 2.949, 2.949' },
+    { bulletMake: 'Nosler', bulletModel: 'AccuBond Long Range', bulletWeightGr: 190, cbtoIn: 2.949, notes: 'Readings 2.949, 2.949' },
+    { bulletMake: 'Hammer Bullets', bulletModel: 'Hammer Hunter', bulletWeightGr: 214, cbtoIn: 2.985, notes: 'Readings 2.986, 2.983 (mean)' },
+  ].map((l) => ({ ...l, comparatorInsert: null, measuredAt: LANDS_DATE, roundCount: null })),
   loadName: 'Hornady Precision Hunter 212 gr ELD-X (factory)',
   version: {
     bulletMake: 'Hornady',
@@ -251,6 +309,7 @@ function rowsFor(spec: RifleSpec) {
     id: ids.session,
     rifleId: ids.rifle,
     loadVersionId: ids.loadVersion,
+    batchId: null,
     date: ZERO_DATE,
     location: ZERO_RANGE.location,
     tempF: ZERO_RANGE.tempF,
@@ -283,6 +342,13 @@ function rowsFor(spec: RifleSpec) {
     createdAt: t,
     updatedAt: t,
   };
+  const lands: LandsMeasurement[] = (spec.lands ?? []).map((l, i) => ({
+    id: `${ids.rifle.slice(0, -1)}${(7 + i).toString(16)}`,
+    rifleId: ids.rifle,
+    ...l,
+    createdAt: t,
+    updatedAt: t,
+  }));
   const card: RangeCard = {
     id: ids.card,
     rifleId: ids.rifle,
@@ -303,7 +369,7 @@ function rowsFor(spec: RifleSpec) {
     updatedAt: t,
     archivedAt: null,
   };
-  return { rifle, load, loadVersion, session, dope, card };
+  return { rifle, lands, load, loadVersion, session, dope, card };
 }
 
 export function buildWorkspace(): Backup {
@@ -315,9 +381,12 @@ export function buildWorkspace(): Backup {
     exportedAt: STAMP.toISOString(),
     app: 'precision-innovation',
     tables: {
+      benchItems: [],
       rifles: sets.map((s) => s.rifle),
+      landsMeasurements: sets.flatMap((s) => s.lands),
       loads: sets.map((s) => s.load),
       loadVersions: sets.map((s) => s.loadVersion),
+      loadBatches: [],
       workups: [],
       workupSteps: [],
       rangeSessions: sets.map((s) => s.session),
