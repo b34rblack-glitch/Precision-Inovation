@@ -1,5 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Alert } from 'react-native';
+import { Button } from '@/components/Buttons';
 import { Screen } from '@/components/Screen';
 import { createLoad } from '@/db/repositories/loads';
 import { LoadForm } from '@/features/loads/LoadForm';
@@ -10,6 +11,13 @@ export default function NewLoadScreen() {
   const { rifleId } = useLocalSearchParams<{ rifleId?: string }>();
   return (
     <Screen underHeader>
+      <Button
+        label="Switch to Guided Setup"
+        variant="secondary"
+        onPress={() =>
+          router.replace(rifleId ? `/loads/wizard?rifleId=${rifleId}` : '/loads/wizard')
+        }
+      />
       <LoadForm
         submitLabel="Save Load"
         defaultRifleId={rifleId ?? null}
